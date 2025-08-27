@@ -3,6 +3,7 @@ import { DrumPadGrid, Pad } from './components/DrumPadGrid';
 import { MockEngine } from './engine/AudioEngine';
 import { useKeyboardPads, KeyMap } from './hooks/useKeyboardPads';
 import { DrumNote, DRUM_LABELS } from './engine/DrumMap';
+import { KeyMappingEditor, MidiToKeys } from './components/KeyMappingEditor';
 
 function App() {
   const engineRef = useRef(new MockEngine());
@@ -51,13 +52,31 @@ function App() {
     }));
   }, []);
 
-  const keyMap: KeyMap = useMemo(() => {
-    const entries: [string, { midi: number }] [] = [];
+  const STORAGE_KEY = 'drum_keymap_v1';
+  const [midiToKeys, setMidiToKeys] = useState<MidiToKeys>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    const init: MidiToKeys = {};
     pads.forEach((p) => {
-      if (p.key) entries.push([p.key, { midi: p.midi }]);
+      if (p.key) init[p.midi] = [p.key];
+    });
+    return init;
+  });
+
+  const keyMap: KeyMap = useMemo(() => {
+    const entries: [string, { midi: number } ][] = [];
+    Object.entries(midiToKeys).forEach(([midi, keys]) => {
+      keys.forEach((k) => entries.push([k, { midi: Number(midi) }]));
     });
     return Object.fromEntries(entries);
-  }, [pads]);
+  }, [midiToKeys]);
+
+  const persistMapping = (next: MidiToKeys) => {
+    setMidiToKeys(next);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+  };
 
   useKeyboardPads(keyMap, {
     onTrigger: (midi, velocity) => {
@@ -79,6 +98,7 @@ function App() {
         onStop={(m) => engineRef.current.stop(m)}
       />
       <p className="text-xs text-gray-500">Hold Shift for accent velocity. More pads mapped to GM drums.</p>
+      <KeyMappingEditor pads={pads} value={midiToKeys} onChange={persistMapping} />
     </div>
   );
 }
