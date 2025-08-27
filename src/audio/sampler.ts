@@ -210,22 +210,13 @@ export async function triggerPad(pad: DrumPad, velocity: number) {
       case 'snare':
         bus.snare.triggerAttackRelease('16n', Tone.now(), vel);
         break;
-      case 'hhOpen': {
-        const decay = HH_OPEN_MIN + (HH_OPEN_MAX - HH_OPEN_MIN) * hiHatOpenLevel;
-        bus.hat.envelope.decay = decay;
-        bus.hat.triggerAttackRelease(decay, Tone.now(), 0.5 + vel * 0.5);
-        break;
-      }
-      case 'hhClosed': {
+      case 'hhOpen':
+      case 'hhClosed':
+      case 'hhPedal': {
+        // Make 44 (Pedal) and 46 (Open) identical to Closed for basic accompaniment
         const decay = HH_CLOSED_RELEASE;
         bus.hat.envelope.decay = decay;
         bus.hat.triggerAttackRelease(decay, Tone.now(), 0.4 + vel * 0.6);
-        break;
-      }
-      case 'hhPedal': {
-        const decay = HH_PEDAL_RELEASE; // short chick
-        bus.hat.envelope.decay = decay;
-        bus.hat.triggerAttackRelease(decay, Tone.now(), 0.5 + vel * 0.5);
         break;
       }
       case 'crash':
@@ -249,22 +240,16 @@ export async function triggerPad(pad: DrumPad, velocity: number) {
     return;
   }
   const now = Tone.now();
-  if (pad === DrumPad.HiHatPedal) {
-    // Simulate foot chick with closed sample and short release
-    sampler!.triggerAttack('F#2', now, vel);
-    sampler!.triggerRelease('F#2', now + HH_PEDAL_RELEASE);
-    return;
-  }
-  if (pad === DrumPad.HiHatClosed) {
+  if (pad === DrumPad.HiHatPedal || pad === DrumPad.HiHatClosed) {
     sampler!.triggerAttack('F#2', now, vel);
     // closed stick tick: short but not too short
     sampler!.triggerRelease('F#2', now + HH_CLOSED_RELEASE);
     return;
   }
   if (pad === DrumPad.HiHatOpen) {
-    const dur = HH_OPEN_MIN + (HH_OPEN_MAX - HH_OPEN_MIN) * hiHatOpenLevel;
-    sampler!.triggerAttack('A#2', now, vel);
-    sampler!.triggerRelease('A#2', now + dur);
+    // Make Open identical to Closed per request
+    sampler!.triggerAttack('F#2', now, vel);
+    sampler!.triggerRelease('F#2', now + HH_CLOSED_RELEASE);
     return;
   }
   const noteName = padToNoteName(pad);
