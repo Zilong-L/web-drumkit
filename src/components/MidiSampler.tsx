@@ -93,7 +93,6 @@ export default function MidiSampler() {
             className="px-3 py-4 rounded border border-gray-700 text-gray-200 hover:border-indigo-500 hover:text-white active:scale-95 transition"
           >
             <div className="text-lg font-semibold">{p.label}</div>
-            <div className="text-xs text-gray-400">{p.midi}</div>
           </button>
         ))}
       </div>
