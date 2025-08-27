@@ -10,6 +10,11 @@ let bpm = 100;
 let isRunning = false;
 let currentBeat = 0;
 let currentBar = 0;
+// Accent per beat: true = hard beat
+let accents: boolean[] = new Array(beatsPerBar).fill(false);
+accents[0] = true;
+// Volume per beat, 0..1
+let volumes: number[] = new Array(beatsPerBar).fill(1);
 
 let loop: Tone.Loop | null = null;
 let clickHigh: Tone.MembraneSynth | null = null;
@@ -25,12 +30,15 @@ function init() {
   Tone.Transport.timeSignature = beatsPerBar;
   loop = new Tone.Loop(time => {
     const beatInBar = currentBeat % beatsPerBar;
-    if (beatInBar === 0) {
-      clickHigh!.triggerAttackRelease(1200, '16n', time, 0.9);
-      currentBar++;
+    // Play hard vs normal beat based on per-beat accent
+    const vol = Math.max(0, Math.min(1, volumes[beatInBar] ?? 1));
+    if (accents[beatInBar]) {
+      clickHigh!.triggerAttackRelease(1200, '16n', time, 0.9 * vol);
     } else {
-      clickLow!.triggerAttackRelease(800, '16n', time, 0.6);
+      clickLow!.triggerAttackRelease(800, '16n', time, 0.6 * vol);
     }
+    // Bar counting still anchors on beat 0
+    if (beatInBar === 0) currentBar++;
     sub?.(beatInBar, currentBar);
     currentBeat++;
   }, '4n');
@@ -67,6 +75,15 @@ export function setBpm(next: number) {
 export function setBeatsPerBar(next: number) {
   beatsPerBar = Math.max(1, Math.min(12, Math.floor(next)));
   Tone.Transport.timeSignature = beatsPerBar;
+  // Resize accents, preserving existing values; ensure at least one accent
+  const newAccents = new Array(beatsPerBar).fill(false);
+  for (let i = 0; i < Math.min(accents.length, beatsPerBar); i++) newAccents[i] = accents[i];
+  if (!newAccents.some(Boolean)) newAccents[0] = true;
+  accents = newAccents;
+  // Resize volumes, preserving, default to 1
+  const newVolumes = new Array(beatsPerBar).fill(1);
+  for (let i = 0; i < Math.min(volumes.length, beatsPerBar); i++) newVolumes[i] = volumes[i];
+  volumes = newVolumes;
 }
 
 export function onTick(fn: Subscriber | null) {
@@ -74,6 +91,34 @@ export function onTick(fn: Subscriber | null) {
 }
 
 export function getState() {
-  return { bpm, beatsPerBar, isRunning };
+  return { bpm, beatsPerBar, isRunning, accents: [...accents], volumes: [...volumes] };
 }
 
+export function setAccentForBeat(beatIndex: number, v: boolean) {
+  const idx = Math.max(0, Math.min(beatsPerBar - 1, Math.floor(beatIndex)));
+  accents[idx] = !!v;
+}
+
+export function toggleAccentForBeat(beatIndex: number) {
+  const idx = Math.max(0, Math.min(beatsPerBar - 1, Math.floor(beatIndex)));
+  accents[idx] = !accents[idx];
+}
+
+export function setAccents(values: boolean[]) {
+  const next = new Array(beatsPerBar).fill(false);
+  for (let i = 0; i < Math.min(values.length, beatsPerBar); i++) next[i] = !!values[i];
+  if (!next.some(Boolean)) next[0] = true;
+  accents = next;
+}
+
+export function setVolumeForBeat(beatIndex: number, value: number) {
+  const idx = Math.max(0, Math.min(beatsPerBar - 1, Math.floor(beatIndex)));
+  const v = Math.max(0, Math.min(1, Number(value)));
+  volumes[idx] = v;
+}
+
+export function setVolumes(values: number[]) {
+  const next = new Array(beatsPerBar).fill(1);
+  for (let i = 0; i < Math.min(values.length, beatsPerBar); i++) next[i] = Math.max(0, Math.min(1, Number(values[i])));
+  volumes = next;
+}
