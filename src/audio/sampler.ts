@@ -121,6 +121,10 @@ export async function triggerMidi(noteNumber: number, velocity: number) {
   const vel = Math.max(0, Math.min(1, velocity / 127));
   await ensureAudioStarted();
   await getDrumSampler();
+  // If we hit Closed Hi-Hat, choke any ringing Open Hi-Hat first
+  if (noteNumber === MidiDrum.HiHatClosed && vel > 0) {
+    chokeOpenHiHat();
+  }
   if (useSynthFallback) {
     const voice = mapMidiToVoice(noteNumber);
     const bus = ensureSynth();
@@ -200,4 +204,18 @@ export function listMappedNotes() {
     .map(k => Number(k))
     .sort((a, b) => a - b);
   return keys.map(k => ({ midi: k, note: BASIC_MAP[k as MidiDrum] }));
+}
+
+function chokeOpenHiHat() {
+  if (useSynthFallback) {
+    try {
+      const bus = ensureSynth();
+      bus.hat.triggerRelease(Tone.now());
+    } catch {}
+    return;
+  }
+  // Samples engine: release the Open Hi-Hat note ('A#2')
+  try {
+    if (sampler) sampler.triggerRelease('A#2', Tone.now());
+  } catch {}
 }
