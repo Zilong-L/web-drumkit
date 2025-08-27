@@ -9,3 +9,58 @@
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Remove default number input spinners */
+input[type=number].no-spinner::-webkit-outer-spin-button,
+input[type=number].no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number].no-spinner {
+  -moz-appearance: textfield;
+}
+
+/* Beautiful slider styling for BPM */
+input[type=range].slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  background: transparent;
+}
+input[type=range].slider:focus {
+  outline: none;
+}
+
+/* Track */
+input[type=range].slider::-webkit-slider-runnable-track {
+  height: 12px;
+  background: linear-gradient(to right, #6366f1 0 var(--val, 0%), #374151 var(--val, 0%) 100%);
+  border-radius: 9999px;
+}
+input[type=range].slider::-moz-range-track {
+  height: 12px;
+  background: linear-gradient(to right, #6366f1 0 var(--val, 0%), #374151 var(--val, 0%) 100%);
+  border-radius: 9999px;
+}
+
+/* Thumb */
+input[type=range].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -4px; /* centers on 12px track */
+  background: #ffffff;
+  border: 2px solid #6366f1; /* indigo-500 */
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+input[type=range].slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: #ffffff;
+  border: 2px solid #6366f1;
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}

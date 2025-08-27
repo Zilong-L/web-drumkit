@@ -10,7 +10,7 @@ export default function MidiSampler() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<{ note?: number; velocity?: number }>({});
-  const [flashMidi, setFlashMidi] = useState<number | null>(null);
+  const [flashPad, setFlashPad] = useState<DrumPad | null>(null);
   const [audioReady, setAudioReady] = useState<boolean>(Tone.getContext().state === 'running');
   const [engine, setEngine] = useState<'samples' | 'synth'>(() => (isUsingFallback() ? 'synth' : 'samples'));
   // no crash/snare variant toggles for now
@@ -25,9 +25,10 @@ export default function MidiSampler() {
         const d = await initMidiListenerForInput(selectedId, async (note, vel) => {
           if (disposed) return;
           setLast({ note, velocity: vel });
-          if (vel > 0) {
-            setFlashMidi(note);
-            setTimeout(() => setFlashMidi(prev => (prev === note ? null : prev)), 80);
+          const pad = midiNoteToPad(note);
+          if (vel > 0 && pad) {
+            setFlashPad(pad);
+            setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
           }
           if (vel > 0) await triggerMidi(note, vel);
         });
@@ -51,15 +52,19 @@ export default function MidiSampler() {
     };
   }, [selectedId]);
 
-  const pads = useMemo(() => listDrumPads(), []);
+  const allPads = useMemo(() => listDrumPads(), []);
+  const order: DrumPad[] = [
+    DrumPad.HiHatClosed, DrumPad.HiHatPedal, DrumPad.HiHatOpen, DrumPad.Crash, DrumPad.Ride, DrumPad.Stick,
+    DrumPad.Kick, DrumPad.Snare, DrumPad.TomHigh, DrumPad.TomMid, DrumPad.TomFloor,
+  ];
+  const pads = useMemo(() => {
+    const map = new Map(allPads.map(p => [p.pad, p] as const));
+    return order.map(p => map.get(p)).filter(Boolean) as typeof allPads;
+  }, [allPads]);
 
   const handlePad = useCallback(async (pad: DrumPad) => {
-    const all = listDrumPads();
-    const hit = all.find(p => p.pad === pad);
-    if (hit) {
-      setFlashMidi(hit.midi);
-      setTimeout(() => setFlashMidi(prev => (prev === hit.midi ? null : prev)), 80);
-    }
+    setFlashPad(pad);
+    setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
     await triggerPad(pad, 100);
   }, []);
 
@@ -108,8 +113,11 @@ export default function MidiSampler() {
   useKeyboardPads(keyMap, {
     onTrigger: async (midi, velocity = 100) => {
       try {
-        setFlashMidi(midi);
-        setTimeout(() => setFlashMidi(prev => (prev === midi ? null : prev)), 80);
+        const pad = midiNoteToPad(midi);
+        if (pad) {
+          setFlashPad(pad);
+          setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
+        }
         await ensureAudioStarted();
         await getDrumSampler();
         await triggerMidi(midi, velocity);
@@ -120,7 +128,7 @@ export default function MidiSampler() {
   });
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-4">
+    <div className="w-full max-w-2xl mx-auto space-y-4 rounded border border-gray-700/60 bg-black/20 p-4">
       <h2 className="text-2xl font-semibold">MIDI Sampler (Tone.js)</h2>
       <p className="text-sm text-gray-400">
         Select a MIDI device and hit pads/notes to hear samples.
@@ -144,23 +152,20 @@ export default function MidiSampler() {
         )}
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-        {pads.map(p => {
-          const active = flashMidi === p.midi;
-          return (
-            <button
-              key={p.pad}
-              onClick={() => handlePad(p.pad)}
-              className={
-                'px-3 py-4 rounded border text-gray-200 transition ' +
-                (active
-                  ? 'border-indigo-400 bg-indigo-600/20 scale-[0.98]'
-                  : 'border-gray-700 hover:border-indigo-500 hover:text-white')
-              }
-            >
-              <div className="text-lg font-semibold">{p.label}</div>
-            </button>
-          );
-        })}
+        {pads.map(p => (
+          <button
+            key={p.pad}
+            onClick={() => handlePad(p.pad)}
+            className={
+              'px-3 py-4 rounded border text-gray-200 active:scale-95 transition ' +
+              (flashPad === p.pad
+                ? 'border-indigo-500 bg-indigo-600/20 shadow'
+                : 'border-gray-700 hover:border-indigo-500 hover:text-white')
+            }
+          >
+            <div className="text-lg font-semibold">{p.label}</div>
+          </button>
+        ))}
       </div>
       <KeyMappingEditor pads={pads.map(p => ({ id: String(p.midi), label: p.label, midi: p.midi }))} value={midiToKeys} onChange={persistMapping} />
       {/* Debug line removed per request: hide note/velocity numbers */}
