@@ -13,6 +13,10 @@ export function useKeyboardPads(map: KeyMap, opts: Options) {
     const handleDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (e.repeat) return; // ignore auto-repeat
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return; // don't steal focus from form fields
+      }
       if (down.has(k)) return;
       const m = map[k];
       if (m) {
