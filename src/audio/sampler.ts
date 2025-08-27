@@ -34,7 +34,7 @@ export enum DrumPad {
 export enum MidiDrum {
   Kick = 36, // Bass Drum 1
   Snare = 38, // Acoustic Snare
-  SideStick = 37, // Side Stick
+  Stick = 37, // Stick
   HiHatClosed = 42, // Closed Hi-Hat
   HiHatPedal = 44, // Pedal Hi-Hat
   HiHatOpen = 46, // Open Hi-Hat
@@ -54,7 +54,7 @@ export enum MidiCC {
 const PAD_TO_MIDI: Record<DrumPad, MidiDrum> = {
   [DrumPad.Kick]: MidiDrum.Kick,
   [DrumPad.Snare]: MidiDrum.Snare,
-  [DrumPad.Stick]: MidiDrum.SideStick,
+  [DrumPad.Stick]: MidiDrum.Stick,
   [DrumPad.HiHatClosed]: MidiDrum.HiHatClosed,
   [DrumPad.HiHatPedal]: MidiDrum.HiHatPedal,
   [DrumPad.HiHatOpen]: MidiDrum.HiHatOpen,
@@ -123,8 +123,7 @@ export function setHiHatOpenByCC4(value: number) {
 }
 
 // Hi-hat timing constants (seconds) — avoid magic numbers
-const HH_OPEN_MIN = 0.35;
-const HH_OPEN_MAX = 1.2;
+const HH_OPEN_DEFAULT = 0.9; // synth fallback only; samples ring naturally
 const HH_CLOSED_RELEASE = 0.16; // short but audible tick
 const HH_PEDAL_RELEASE = 0.10;  // foot chick
 
@@ -211,7 +210,7 @@ export async function triggerPad(pad: DrumPad, velocity: number) {
         bus.snare.triggerAttackRelease('16n', Tone.now(), vel);
         break;
       case 'hhOpen': {
-        const decay = HH_OPEN_MIN + (HH_OPEN_MAX - HH_OPEN_MIN) * hiHatOpenLevel;
+        const decay = HH_OPEN_DEFAULT;
         bus.hat.envelope.decay = decay;
         bus.hat.triggerAttackRelease(decay, Tone.now(), 0.5 + vel * 0.5);
         break;
@@ -251,9 +250,8 @@ export async function triggerPad(pad: DrumPad, velocity: number) {
     return;
   }
   if (pad === DrumPad.HiHatOpen) {
-    const dur = HH_OPEN_MIN + (HH_OPEN_MAX - HH_OPEN_MIN) * hiHatOpenLevel;
+    // Play original open sample tail; do not shorten based on CC
     sampler!.triggerAttack('A#2', now, vel);
-    sampler!.triggerRelease('A#2', now + dur);
     return;
   }
   if (pad === DrumPad.HiHatPedal) {
