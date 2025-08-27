@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import MidiDemo from './components/MidiDemo';
 
 function App() {
   const [count, setCount] = useState(0);
@@ -12,6 +13,9 @@ function App() {
       >
         Count: {count}
       </button>
+      <div className="w-full mt-8">
+        <MidiDemo />
+      </div>
     </div>
   );
 }
