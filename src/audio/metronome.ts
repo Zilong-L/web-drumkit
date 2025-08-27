@@ -75,10 +75,9 @@ export function setBpm(next: number) {
 export function setBeatsPerBar(next: number) {
   beatsPerBar = Math.max(1, Math.min(12, Math.floor(next)));
   Tone.Transport.timeSignature = beatsPerBar;
-  // Resize accents, preserving existing values; ensure at least one accent
+// Resize accents, preserving existing values
   const newAccents = new Array(beatsPerBar).fill(false);
   for (let i = 0; i < Math.min(accents.length, beatsPerBar); i++) newAccents[i] = accents[i];
-  if (!newAccents.some(Boolean)) newAccents[0] = true;
   accents = newAccents;
   // Resize volumes, preserving, default to 1
   const newVolumes = new Array(beatsPerBar).fill(1);
@@ -107,7 +106,6 @@ export function toggleAccentForBeat(beatIndex: number) {
 export function setAccents(values: boolean[]) {
   const next = new Array(beatsPerBar).fill(false);
   for (let i = 0; i < Math.min(values.length, beatsPerBar); i++) next[i] = !!values[i];
-  if (!next.some(Boolean)) next[0] = true;
   accents = next;
 }
 

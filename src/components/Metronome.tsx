@@ -117,7 +117,6 @@ export default function Metronome() {
               // Resize accents locally, preserving values
               const nextAcc = new Array(v).fill(false);
               for (let i = 0; i < Math.min(accents.length, v); i++) nextAcc[i] = accents[i];
-              if (!nextAcc.some(Boolean) && v > 0) nextAcc[0] = true;
               setAccents(nextAcc);
               const nextVols = new Array(v).fill(1);
               for (let i = 0; i < Math.min(volumes.length, v); i++) nextVols[i] = volumes[i];
@@ -160,10 +159,6 @@ export default function Metronome() {
               onClick={() => {
                 const next = [...accents];
                 next[i] = !next[i];
-                // Ensure at least one accent stays on
-                if (!next.some(Boolean)) {
-                  next[i] = true;
-                }
                 setAccents(next);
                 M.setAccentForBeat(i, next[i]);
               }}
