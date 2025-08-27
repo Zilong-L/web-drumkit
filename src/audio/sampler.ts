@@ -21,6 +21,7 @@ export enum DrumPad {
   SideStick = 'SideStick',
   HiHatClosed = 'HiHatClosed',
   HiHatOpen = 'HiHatOpen',
+  HiHatPedal = 'HiHatPedal',
   Crash = 'Crash', // supports 14" / 18" variants
   Ride = 'Ride',
   TomHigh = 'TomHigh',
@@ -34,6 +35,7 @@ export enum MidiDrum {
   Snare = 38, // Acoustic Snare
   SideStick = 37, // Side Stick
   HiHatClosed = 42, // Closed Hi-Hat
+  HiHatPedal = 44, // Pedal Hi-Hat
   HiHatOpen = 46, // Open Hi-Hat
   Crash = 49, // Crash Cymbal 1
   Ride = 51, // Ride Cymbal 1
@@ -42,12 +44,18 @@ export enum MidiDrum {
   TomFloor = 41, // Low Floor Tom
 }
 
+// MIDI Control Change semantics used
+export enum MidiCC {
+  FootController = 4,
+}
+
 // One place to convert semantic pads <-> MIDI notes
 const PAD_TO_MIDI: Record<DrumPad, MidiDrum> = {
   [DrumPad.Kick]: MidiDrum.Kick,
   [DrumPad.Snare]: MidiDrum.Snare,
   [DrumPad.SideStick]: MidiDrum.SideStick,
   [DrumPad.HiHatClosed]: MidiDrum.HiHatClosed,
+  [DrumPad.HiHatPedal]: MidiDrum.HiHatPedal,
   [DrumPad.HiHatOpen]: MidiDrum.HiHatOpen,
   [DrumPad.Crash]: MidiDrum.Crash,
   [DrumPad.Ride]: MidiDrum.Ride,
@@ -61,7 +69,7 @@ const MIDI_TO_PAD: Record<number, DrumPad> = Object.fromEntries(
 ) as Record<number, DrumPad>;
 
 // Basic kit mapping: pads -> sample note names
-const BASIC_MAP_PAD: Record<Exclude<DrumPad, DrumPad.Crash>, NoteName> & { Crash?: never } = {
+const BASIC_MAP_PAD: Record<Exclude<DrumPad, DrumPad.Crash | DrumPad.HiHatPedal>, NoteName> & { Crash?: never; HiHatPedal?: never } = {
   [DrumPad.Kick]: 'C2',
   [DrumPad.Snare]: 'D2',
   [DrumPad.SideStick]: 'D#2',
@@ -105,6 +113,18 @@ let synthBus: {
   tomMid: Tone.MembraneSynth;
   tomFloor: Tone.MembraneSynth;
 } | null = null;
+
+// Hi-hat openness from CC4 (0..1)
+let hiHatOpenLevel = 0; // 0 closed, 1 fully open
+export function setHiHatOpenByCC4(value: number) {
+  hiHatOpenLevel = Math.max(0, Math.min(1, value / 127));
+}
+
+// Hi-hat timing constants (seconds) — avoid magic numbers
+const HH_OPEN_MIN = 0.35;
+const HH_OPEN_MAX = 1.2;
+const HH_CLOSED_RELEASE = 0.16; // short but audible tick
+const HH_PEDAL_RELEASE = 0.10;  // foot chick
 
 export async function ensureAudioStarted() {
   if (Tone.getContext().state !== 'running') {
@@ -165,7 +185,7 @@ function padToNoteName(pad: DrumPad): NoteName {
   if (pad === DrumPad.Crash) {
     return currentCrashVariant === '18' ? 'C#3' : 'C#4';
   }
-  return BASIC_MAP_PAD[pad as Exclude<DrumPad, DrumPad.Crash>];
+  return BASIC_MAP_PAD[pad as Exclude<DrumPad, DrumPad.Crash | DrumPad.HiHatPedal>] as NoteName;
 }
 
 export function midiNoteToPad(noteNumber: number): DrumPad | null {
@@ -176,8 +196,9 @@ export async function triggerPad(pad: DrumPad, velocity: number) {
   const vel = Math.max(0, Math.min(1, velocity / 127));
   await ensureAudioStarted();
   await getDrumSampler();
-  if (pad === DrumPad.HiHatClosed && vel > 0) {
-    chokeOpenHiHat();
+  // Hi-hat is monophonic: new event chokes previous
+  if (pad === DrumPad.HiHatClosed || pad === DrumPad.HiHatOpen || pad === DrumPad.HiHatPedal) {
+    chokeHiHatAll();
   }
   if (useSynthFallback) {
     const voice = padToVoice(pad);
@@ -189,14 +210,24 @@ export async function triggerPad(pad: DrumPad, velocity: number) {
       case 'snare':
         bus.snare.triggerAttackRelease('16n', Tone.now(), vel);
         break;
-      case 'hhOpen':
-        bus.hat.envelope.decay = 0.3;
-        bus.hat.triggerAttackRelease('8n', Tone.now(), 0.5 + vel * 0.5);
+      case 'hhOpen': {
+        const decay = HH_OPEN_MIN + (HH_OPEN_MAX - HH_OPEN_MIN) * hiHatOpenLevel;
+        bus.hat.envelope.decay = decay;
+        bus.hat.triggerAttackRelease(decay, Tone.now(), 0.5 + vel * 0.5);
         break;
-      case 'hhClosed':
-        bus.hat.envelope.decay = 0.07;
-        bus.hat.triggerAttackRelease('32n', Tone.now(), 0.4 + vel * 0.6);
+      }
+      case 'hhClosed': {
+        const decay = HH_CLOSED_RELEASE;
+        bus.hat.envelope.decay = decay;
+        bus.hat.triggerAttackRelease(decay, Tone.now(), 0.4 + vel * 0.6);
         break;
+      }
+      case 'hhPedal': {
+        const decay = HH_PEDAL_RELEASE; // short chick
+        bus.hat.envelope.decay = decay;
+        bus.hat.triggerAttackRelease(decay, Tone.now(), 0.5 + vel * 0.5);
+        break;
+      }
       case 'crash':
         bus.cym.envelope.decay = 1.6;
         bus.cym.triggerAttackRelease('2n', Tone.now(), 0.4 + vel * 0.6);
@@ -217,8 +248,27 @@ export async function triggerPad(pad: DrumPad, velocity: number) {
     }
     return;
   }
+  const now = Tone.now();
+  if (pad === DrumPad.HiHatPedal) {
+    // Simulate foot chick with closed sample and short release
+    sampler!.triggerAttack('F#2', now, vel);
+    sampler!.triggerRelease('F#2', now + HH_PEDAL_RELEASE);
+    return;
+  }
+  if (pad === DrumPad.HiHatClosed) {
+    sampler!.triggerAttack('F#2', now, vel);
+    // closed stick tick: short but not too short
+    sampler!.triggerRelease('F#2', now + HH_CLOSED_RELEASE);
+    return;
+  }
+  if (pad === DrumPad.HiHatOpen) {
+    const dur = HH_OPEN_MIN + (HH_OPEN_MAX - HH_OPEN_MIN) * hiHatOpenLevel;
+    sampler!.triggerAttack('A#2', now, vel);
+    sampler!.triggerRelease('A#2', now + dur);
+    return;
+  }
   const noteName = padToNoteName(pad);
-  sampler!.triggerAttack(noteName, Tone.now(), vel);
+  sampler!.triggerAttack(noteName, now, vel);
 }
 
 // Back-compat thin adapter for raw MIDI input
@@ -228,7 +278,7 @@ export async function triggerMidi(noteNumber: number, velocity: number) {
   return triggerPad(pad, velocity);
 }
 
-type Voice = 'kick' | 'snare' | 'hhClosed' | 'hhOpen' | 'crash' | 'ride' | 'tomHigh' | 'tomMid' | 'tomFloor';
+type Voice = 'kick' | 'snare' | 'hhClosed' | 'hhOpen' | 'hhPedal' | 'crash' | 'ride' | 'tomHigh' | 'tomMid' | 'tomFloor';
 function padToVoice(pad: DrumPad): Voice {
   switch (pad) {
     case DrumPad.Kick:
@@ -239,6 +289,8 @@ function padToVoice(pad: DrumPad): Voice {
       return 'hhOpen';
     case DrumPad.HiHatClosed:
       return 'hhClosed';
+    case DrumPad.HiHatPedal:
+      return 'hhPedal';
     case DrumPad.Crash:
       return 'crash';
     case DrumPad.Ride:
@@ -261,6 +313,7 @@ export function listDrumPads() {
     DrumPad.Snare,
     DrumPad.SideStick,
     DrumPad.HiHatClosed,
+    DrumPad.HiHatPedal,
     DrumPad.HiHatOpen,
     DrumPad.Crash,
     DrumPad.Ride,
@@ -291,5 +344,21 @@ function chokeOpenHiHat() {
   // Samples engine: release the Open Hi-Hat note ('A#2')
   try {
     if (sampler) sampler.triggerRelease('A#2', Tone.now());
+  } catch {}
+}
+
+function chokeHiHatAll() {
+  if (useSynthFallback) {
+    try {
+      const bus = ensureSynth();
+      bus.hat.triggerRelease(Tone.now());
+    } catch {}
+    return;
+  }
+  try {
+    if (sampler) {
+      sampler.triggerRelease('A#2', Tone.now());
+      sampler.triggerRelease('F#2', Tone.now());
+    }
   } catch {}
 }

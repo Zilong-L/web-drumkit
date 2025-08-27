@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import MidiDevicePicker from './MidiDevicePicker';
-import { initMidiListenerForInput } from '../midi/midi';
-import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad, getCrashVariant, setCrashVariant } from '../audio/sampler';
+import { initMidiCcListenerForInput, initMidiListenerForInput } from '../midi/midi';
+import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad, getCrashVariant, setCrashVariant, MidiCC, setHiHatOpenByCC4 } from '../audio/sampler';
 import * as Tone from 'tone';
 
 export default function MidiSampler() {
@@ -15,6 +15,7 @@ export default function MidiSampler() {
   useEffect(() => {
     let disposed = false;
     let disposer: { dispose: () => void } | null = null;
+    let ccDisposer: { dispose: () => void } | null = null;
     if (!selectedId) return () => {};
     (async () => {
       try {
@@ -24,6 +25,10 @@ export default function MidiSampler() {
           if (vel > 0) await triggerMidi(note, vel);
         });
         disposer = d;
+        ccDisposer = await initMidiCcListenerForInput(selectedId, (cc, val) => {
+          if (disposed) return;
+          if (cc === MidiCC.FootController) setHiHatOpenByCC4(val);
+        });
       } catch (e: any) {
         setError(e?.message || String(e));
       }
@@ -32,6 +37,9 @@ export default function MidiSampler() {
       disposed = true;
       try {
         disposer?.dispose();
+      } catch {}
+      try {
+        ccDisposer?.dispose();
       } catch {}
     };
   }, [selectedId]);

@@ -4,6 +4,12 @@ export type MidiCallback = (
   raw: WebMidi.MIDIMessageEvent
 ) => void;
 
+export type MidiCcCallback = (
+  controller: number,
+  value: number,
+  raw: WebMidi.MIDIMessageEvent
+) => void;
+
 function isIterableMap<T>(
   obj: Map<string, T> | { values: () => IterableIterator<T> }
 ): obj is Map<string, T> {
@@ -146,6 +152,63 @@ export async function initMidiListenerForInput(
     dispose() {
       detach();
       // do not clobber external listeners: we wrapped prev above
+    },
+  };
+}
+
+export async function initMidiCcListenerForInput(
+  inputId: string,
+  callback: MidiCcCallback
+) {
+  const access = await getMIDIAccess();
+
+  const handler = (e: WebMidi.MIDIMessageEvent) => {
+    const data = e.data;
+    if (!data || data.length < 3) return;
+    const status = data[0];
+    const command = status & 0xf0;
+    if (command === 0xb0) {
+      const cc = data[1];
+      const val = data[2];
+      callback(cc, val, e);
+    }
+  };
+
+  const attach = () => {
+    let found = false;
+    eachInput(access.inputs, input => {
+      if (input.id === inputId) {
+        // wrap any existing handler to avoid clobbering note listeners
+        const prev = input.onmidimessage;
+        input.onmidimessage = ev => {
+          prev?.(ev);
+          handler(ev);
+        };
+        found = true;
+      }
+    });
+    return found;
+  };
+  const detach = () => {
+    eachInput(access.inputs, input => {
+      if (input.onmidimessage === handler) input.onmidimessage = null;
+    });
+  };
+
+  attach();
+
+  const onStateChange = () => {
+    attach();
+  };
+  const prev = access.onstatechange;
+  access.onstatechange = e => {
+    prev?.(e);
+    onStateChange();
+  };
+
+  return {
+    dispose() {
+      detach();
     },
   };
 }
