@@ -17,12 +17,10 @@ export default function Metronome() {
     return () => M.onTick(null);
   }, []);
 
-  const indicators = useMemo(() => {
-    return new Array(beats).fill(0).map((_, i) => i);
-  }, [beats]);
+  const indicators = useMemo(() => new Array(beats).fill(0).map((_, i) => i), [beats]);
 
   return (
-    <div className="w-full mx-auto space-y-3">
+    <div className="w-full mx-auto rounded border border-gray-700/60 bg-black/20 p-4 space-y-3">
       <div className="flex items-center gap-3">
         <button
           onClick={async () => {
@@ -30,7 +28,7 @@ export default function Metronome() {
             const s = M.getState();
             setRunning(s.isRunning);
           }}
-          className={'px-3 py-2 rounded text-sm font-medium ' + (running ? 'bg-red-600 hover:bg-red-500' : 'bg-green-600 hover:bg-green-500')}
+          className={'px-4 py-2 rounded text-sm font-medium shadow ' + (running ? 'bg-red-600 hover:bg-red-500' : 'bg-green-600 hover:bg-green-500')}
         >
           {running ? 'Stop' : 'Start'}
         </button>
@@ -78,7 +76,7 @@ export default function Metronome() {
         {indicators.map(i => (
           <div
             key={i}
-            className={'h-3 flex-1 rounded ' + (i === beatInBar ? 'bg-indigo-500' : 'bg-gray-700')}
+            className={'h-2 flex-1 rounded transition ' + (i === beatInBar ? 'bg-indigo-500 scale-y-150' : 'bg-gray-700')}
           />
         ))}
       </div>

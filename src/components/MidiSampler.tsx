@@ -21,7 +21,11 @@ export default function MidiSampler() {
       try {
         const d = await initMidiListenerForInput(selectedId, async (note, vel) => {
           if (disposed) return;
-          setLast({ note, velocity: vel });
+          const pad = midiNoteToPad(note);
+          if (vel > 0 && pad) {
+            setFlashPad(pad);
+            setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
+          }
           if (vel > 0) await triggerMidi(note, vel);
         });
         disposer = d;
@@ -44,9 +48,20 @@ export default function MidiSampler() {
     };
   }, [selectedId]);
 
-  const pads = useMemo(() => listDrumPads(), []);
+  const allPads = useMemo(() => listDrumPads(), []);
+  const order: DrumPad[] = [
+    DrumPad.HiHatClosed, DrumPad.HiHatPedal, DrumPad.HiHatOpen, DrumPad.Crash, DrumPad.Ride, DrumPad.Stick,
+    DrumPad.Kick, DrumPad.Snare, DrumPad.TomHigh, DrumPad.TomMid, DrumPad.TomFloor,
+  ];
+  const pads = useMemo(() => {
+    const map = new Map(allPads.map(p => [p.pad, p] as const));
+    return order.map(p => map.get(p)).filter(Boolean) as typeof allPads;
+  }, [allPads]);
 
+  const [flashPad, setFlashPad] = useState<DrumPad | null>(null);
   const handlePad = useCallback(async (pad: DrumPad) => {
+    setFlashPad(pad);
+    setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
     await triggerPad(pad, 100);
   }, []);
 
@@ -62,7 +77,7 @@ export default function MidiSampler() {
   }, []);
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-4">
+    <div className="w-full max-w-2xl mx-auto space-y-4 rounded border border-gray-700/60 bg-black/20 p-4">
       <h2 className="text-2xl font-semibold">MIDI Sampler (Tone.js)</h2>
       <p className="text-sm text-gray-400">
         Select a MIDI device and hit pads/notes to hear samples.
@@ -90,7 +105,12 @@ export default function MidiSampler() {
           <button
             key={p.pad}
             onClick={() => handlePad(p.pad)}
-            className="px-3 py-4 rounded border border-gray-700 text-gray-200 hover:border-indigo-500 hover:text-white active:scale-95 transition"
+            className={
+              'px-3 py-4 rounded border text-gray-200 active:scale-95 transition ' +
+              (flashPad === p.pad
+                ? 'border-indigo-500 bg-indigo-600/20 shadow'
+                : 'border-gray-700 hover:border-indigo-500 hover:text-white')
+            }
           >
             <div className="text-lg font-semibold">{p.label}</div>
           </button>
