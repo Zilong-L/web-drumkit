@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import MidiDemo from './components/MidiDemo';
+import MidiSampler from './components/MidiSampler';
 
 function App() {
   const [count, setCount] = useState(0);
@@ -14,7 +14,7 @@ function App() {
         Count: {count}
       </button>
       <div className="w-full mt-8">
-        <MidiDemo />
+        <MidiSampler />
       </div>
     </div>
   );
