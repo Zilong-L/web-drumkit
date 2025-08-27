@@ -11,8 +11,8 @@ export default function MidiSampler() {
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<{ note?: number; velocity?: number }>({});
   const [flashPad, setFlashPad] = useState<DrumPad | null>(null);
-  const [audioReady, setAudioReady] = useState<boolean>(Tone.getContext().state === 'running');
   const [engine, setEngine] = useState<'samples' | 'synth'>(() => (isUsingFallback() ? 'synth' : 'samples'));
+  const [loading, setLoading] = useState<boolean>(true);
   // no crash/snare variant toggles for now
 
   useEffect(() => {
@@ -62,22 +62,34 @@ export default function MidiSampler() {
     return order.map(p => map.get(p)).filter(Boolean) as typeof allPads;
   }, [allPads]);
 
+  // Try to preload the sampler as soon as component mounts
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        // Preload sampler; if it fails, module flips to synth fallback internally
+        await getDrumSampler();
+      } catch (e: any) {
+        setError(e?.message || String(e));
+      } finally {
+        if (!cancelled) {
+          setEngine(isUsingFallback() ? 'synth' : 'samples');
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handlePad = useCallback(async (pad: DrumPad) => {
+    if (loading) return; // ignore interaction while loading
     setFlashPad(pad);
     setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
     await triggerPad(pad, 100);
-  }, []);
-
-  const enableAudio = useCallback(async () => {
-    try {
-      await ensureAudioStarted();
-      await getDrumSampler(); // preload samples or init synth fallback
-      setEngine(isUsingFallback() ? 'synth' : 'samples');
-      setAudioReady(true);
-    } catch (e: any) {
-      setError(e?.message || String(e));
-    }
-  }, []);
+  }, [loading]);
 
   // Keyboard mapping: multiple keys per drum with persistence
   const STORAGE_KEY = 'drum_keymap_v1';
@@ -113,6 +125,7 @@ export default function MidiSampler() {
   useKeyboardPads(keyMap, {
     onTrigger: async (midi, velocity = 100) => {
       try {
+        if (loading) return;
         const pad = midiNoteToPad(midi);
         if (pad) {
           setFlashPad(pad);
@@ -139,33 +152,36 @@ export default function MidiSampler() {
           setSelectedId(id || null);
         }}
         />
-        {!audioReady ? (
-          <button
-            onClick={enableAudio}
-            className="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition text-sm"
-            title="Unlock browser audio and preload samples"
-          >
-            Enable Audio
-          </button>
-        ) : (
-          <span className="text-xs px-2 py-1 rounded border border-green-700 text-green-400">Audio: {engine === 'samples' ? 'Samples' : 'Synth fallback'}</span>
-        )}
+        <div className="flex items-center gap-2">
+          {loading && (
+            <span className="text-xs px-2 py-1 rounded border border-indigo-700 text-indigo-300">Loading kit…</span>
+          )}
+          <span className="text-xs px-2 py-1 rounded border border-green-700 text-green-400">Engine: {engine === 'samples' ? 'Samples' : 'Synth fallback'}</span>
+        </div>
       </div>
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-        {pads.map(p => (
-          <button
-            key={p.pad}
-            onClick={() => handlePad(p.pad)}
-            className={
-              'px-3 py-4 rounded border text-gray-200 active:scale-95 transition ' +
-              (flashPad === p.pad
-                ? 'border-indigo-500 bg-indigo-600/20 shadow'
-                : 'border-gray-700 hover:border-indigo-500 hover:text-white')
-            }
-          >
-            <div className="text-lg font-semibold">{p.label}</div>
-          </button>
-        ))}
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 grid place-items-center bg-black/30 backdrop-blur-[1px] rounded">
+            <div className="text-sm text-indigo-200">Loading samples…</div>
+          </div>
+        )}
+        <div className={"grid grid-cols-3 sm:grid-cols-6 gap-2 " + (loading ? 'pointer-events-none opacity-50' : '')}>
+          {pads.map(p => (
+            <button
+              key={p.pad}
+              disabled={loading}
+              onClick={() => handlePad(p.pad)}
+              className={
+                'px-3 py-4 rounded border text-gray-200 active:scale-95 transition ' +
+                (flashPad === p.pad
+                  ? 'border-indigo-500 bg-indigo-600/20 shadow'
+                  : 'border-gray-700 hover:border-indigo-500 hover:text-white')
+              }
+            >
+              <div className="text-lg font-semibold">{p.label}</div>
+            </button>
+          ))}
+        </div>
       </div>
       <KeyMappingEditor pads={pads.map(p => ({ id: String(p.midi), label: p.label, midi: p.midi }))} value={midiToKeys} onChange={persistMapping} />
       {/* Debug line removed per request: hide note/velocity numbers */}
