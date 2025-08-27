@@ -35,14 +35,32 @@ Utility classes are available via `@tailwind` directives in `src/index.css`. The
 
 ### Next Steps
 
-1. Implement drum pad components (map keys -> audio samples).
-2. Add audio loading & playback with Web Audio API.
-3. Visual feedback (animations) on key press / click.
-4. Recording / loop feature (optional).
+1. Implement drum pad components (map keys -> audio samples). ✔ done (basic)
+2. Add audio loading & playback with Web Audio API or Tone.js.
+3. Visual feedback (animations) on key press / click). ✔ basic
+4. Customizable keyboard mapping with multiple keys per drum. ✔ done
+5. Recording / loop feature (optional).
 
 ---
 
 Happy hacking!
+
+### Engine Integration
+
+This project expects an `AudioEngine` implementation with a minimal interface:
+
+```
+play(note: string, options?: { velocity?: number }): void
+stop(note: string): void
+```
+
+See `src/engine/AudioEngine.ts`. The app currently uses a `MockEngine` for development. Plug in your engine by swapping the instance in `src/App.tsx`.
+
+`src/engine/DrumMap.ts` provides a General MIDI drum enum (`DrumNote`) and labels so we avoid magic numbers (e.g., `DrumNote.Kick` = 36).
+
+The key mapping editor lives in `src/components/KeyMappingEditor.tsx`. Mappings persist in `localStorage` and support multiple keys per drum for fast rolls.
+
+Keyboard mapping lives in `src/hooks/useKeyboardPads.ts`; pad components in `src/components/`.
 
 ### Drum Samples Submodule
 
