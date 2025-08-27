@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import MidiDevicePicker from './MidiDevicePicker';
 import { initMidiListenerForInput } from '../midi/midi';
-import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad, getSnareVariant, setSnareVariant } from '../audio/sampler';
+import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad, getCrashVariant, setCrashVariant } from '../audio/sampler';
 import * as Tone from 'tone';
 
 export default function MidiSampler() {
@@ -10,7 +10,7 @@ export default function MidiSampler() {
   const [last, setLast] = useState<{ note?: number; velocity?: number }>({});
   const [audioReady, setAudioReady] = useState<boolean>(Tone.getContext().state === 'running');
   const [engine, setEngine] = useState<'samples' | 'synth'>(() => (isUsingFallback() ? 'synth' : 'samples'));
-  const [snareVariant, setSnareVar] = useState<'14' | '18'>(getSnareVariant());
+  const [crashVariant, setCrashVar] = useState<'14' | '18'>(getCrashVariant());
 
   useEffect(() => {
     let disposed = false;
@@ -76,14 +76,14 @@ export default function MidiSampler() {
         ) : (
           <div className="flex items-center gap-2">
             <span className="text-xs px-2 py-1 rounded border border-green-700 text-green-400">Audio: {engine === 'samples' ? 'Samples' : 'Synth fallback'}</span>
-            <label className="text-xs text-gray-400">Snare</label>
+            <label className="text-xs text-gray-400">Crash</label>
             <select
               className="text-xs bg-transparent border border-gray-700 rounded px-2 py-1"
-              value={snareVariant}
+              value={crashVariant}
               onChange={e => {
                 const v = (e.target.value as '14' | '18');
-                setSnareVar(v);
-                setSnareVariant(v);
+                setCrashVar(v);
+                setCrashVariant(v);
               }}
             >
               <option value="14">14</option>

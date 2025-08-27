@@ -3,12 +3,12 @@ import * as Tone from 'tone';
 // Primary note names used by our sample set
 type NoteName =
   | 'C2' // Kick
-  | 'D2' // Snare 14
-  | 'E2' // Snare 18 (alt)
+  | 'D2' // Snare
   | 'D#2' // Side Stick
   | 'F#2' // HH Closed
   | 'A#2' // HH Open
-  | 'C#3' // Crash
+  | 'C#3' // Crash 18
+  | 'C#4' // Crash 14
   | 'D#3' // Ride
   | 'C3' // Tom High
   | 'A2' // Tom Mid
@@ -21,7 +21,7 @@ export enum DrumPad {
   SideStick = 'SideStick',
   HiHatClosed = 'HiHatClosed',
   HiHatOpen = 'HiHatOpen',
-  Crash = 'Crash',
+  Crash = 'Crash', // supports 14" / 18" variants
   Ride = 'Ride',
   TomHigh = 'TomHigh',
   TomMid = 'TomMid',
@@ -61,13 +61,12 @@ const MIDI_TO_PAD: Record<number, DrumPad> = Object.fromEntries(
 ) as Record<number, DrumPad>;
 
 // Basic kit mapping: pads -> sample note names
-const BASIC_MAP_PAD: Record<DrumPad, NoteName> = {
+const BASIC_MAP_PAD: Record<Exclude<DrumPad, DrumPad.Crash>, NoteName> & { Crash?: never } = {
   [DrumPad.Kick]: 'C2',
   [DrumPad.Snare]: 'D2',
   [DrumPad.SideStick]: 'D#2',
   [DrumPad.HiHatClosed]: 'F#2',
   [DrumPad.HiHatOpen]: 'A#2',
-  [DrumPad.Crash]: 'C#3',
   [DrumPad.Ride]: 'D#3',
   [DrumPad.TomHigh]: 'C3',
   [DrumPad.TomMid]: 'A2',
@@ -82,11 +81,11 @@ const base = `/samples/${BRAND}`;
 const urls: Record<NoteName, string> = {
   C2: `${base}/kick.wav`,
   D2: `${base}/snare-14.wav`,
-  E2: `${base}/snare-18.wav`,
   'D#2': `${base}/stick.wav`,
   'F#2': `${base}/hh-closed.wav`,
   'A#2': `${base}/hh-open.wav`,
-  'C#3': `${base}/crash.wav`,
+  'C#3': `${base}/crash-18.wav`,
+  'C#4': `${base}/crash-14.wav`,
   'D#3': `${base}/ride.wav`,
   C3: `${base}/tom-high.wav`,
   A2: `${base}/tom-mid.wav`,
@@ -163,10 +162,10 @@ export async function getDrumSampler() {
 }
 
 function padToNoteName(pad: DrumPad): NoteName {
-  if (pad === DrumPad.Snare) {
-    return currentSnareVariant === '18' ? 'E2' : 'D2';
+  if (pad === DrumPad.Crash) {
+    return currentCrashVariant === '18' ? 'C#3' : 'C#4';
   }
-  return BASIC_MAP_PAD[pad];
+  return BASIC_MAP_PAD[pad as Exclude<DrumPad, DrumPad.Crash>];
 }
 
 export function midiNoteToPad(noteNumber: number): DrumPad | null {
@@ -272,13 +271,13 @@ export function listDrumPads() {
   return pads.map(p => ({ pad: p, midi: PAD_TO_MIDI[p] as number, label: p }));
 }
 
-// Snare variant control
-let currentSnareVariant: '14' | '18' = '14';
-export function setSnareVariant(v: '14' | '18') {
-  currentSnareVariant = v;
+// Crash variant control (14" / 18")
+let currentCrashVariant: '14' | '18' = '18';
+export function setCrashVariant(v: '14' | '18') {
+  currentCrashVariant = v;
 }
-export function getSnareVariant() {
-  return currentSnareVariant;
+export function getCrashVariant() {
+  return currentCrashVariant;
 }
 
 function chokeOpenHiHat() {
