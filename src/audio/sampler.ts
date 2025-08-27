@@ -3,6 +3,19 @@ import * as Tone from 'tone';
 // Primary note names used by our sample set
 type NoteName = 'C2' | 'D2' | 'F#2' | 'A#2' | 'C#3' | 'D#3' | 'C3' | 'A2' | 'F2';
 
+// Semantic drum pads (avoid magic numbers in the app)
+export enum DrumPad {
+  Kick = 'Kick',
+  Snare = 'Snare',
+  HiHatClosed = 'HiHatClosed',
+  HiHatOpen = 'HiHatOpen',
+  Crash = 'Crash',
+  Ride = 'Ride',
+  TomHigh = 'TomHigh',
+  TomMid = 'TomMid',
+  TomFloor = 'TomFloor',
+}
+
 // GM standard note numbers (subset) for a basic drum kit
 export enum MidiDrum {
   Kick = 36, // Bass Drum 1
@@ -16,17 +29,34 @@ export enum MidiDrum {
   TomFloor = 41, // Low Floor Tom
 }
 
-// Basic kit mapping only (no range fallbacks, no merges)
-const BASIC_MAP: Record<MidiDrum, NoteName> = {
-  [MidiDrum.Kick]: 'C2',
-  [MidiDrum.Snare]: 'D2',
-  [MidiDrum.HiHatClosed]: 'F#2',
-  [MidiDrum.HiHatOpen]: 'A#2',
-  [MidiDrum.Crash]: 'C#3',
-  [MidiDrum.Ride]: 'D#3',
-  [MidiDrum.TomHigh]: 'C3',
-  [MidiDrum.TomMid]: 'A2',
-  [MidiDrum.TomFloor]: 'F2',
+// One place to convert semantic pads <-> MIDI notes
+const PAD_TO_MIDI: Record<DrumPad, MidiDrum> = {
+  [DrumPad.Kick]: MidiDrum.Kick,
+  [DrumPad.Snare]: MidiDrum.Snare,
+  [DrumPad.HiHatClosed]: MidiDrum.HiHatClosed,
+  [DrumPad.HiHatOpen]: MidiDrum.HiHatOpen,
+  [DrumPad.Crash]: MidiDrum.Crash,
+  [DrumPad.Ride]: MidiDrum.Ride,
+  [DrumPad.TomHigh]: MidiDrum.TomHigh,
+  [DrumPad.TomMid]: MidiDrum.TomMid,
+  [DrumPad.TomFloor]: MidiDrum.TomFloor,
+};
+
+const MIDI_TO_PAD: Record<number, DrumPad> = Object.fromEntries(
+  Object.entries(PAD_TO_MIDI).map(([pad, midi]) => [midi as number, pad as unknown as DrumPad])
+) as Record<number, DrumPad>;
+
+// Basic kit mapping: pads -> sample note names
+const BASIC_MAP_PAD: Record<DrumPad, NoteName> = {
+  [DrumPad.Kick]: 'C2',
+  [DrumPad.Snare]: 'D2',
+  [DrumPad.HiHatClosed]: 'F#2',
+  [DrumPad.HiHatOpen]: 'A#2',
+  [DrumPad.Crash]: 'C#3',
+  [DrumPad.Ride]: 'D#3',
+  [DrumPad.TomHigh]: 'C3',
+  [DrumPad.TomMid]: 'A2',
+  [DrumPad.TomFloor]: 'F2',
 };
 
 // Map some local samples to note names above
@@ -113,20 +143,23 @@ export async function getDrumSampler() {
   return loaded;
 }
 
-function mapMidi(noteNumber: number): NoteName | undefined {
-  return BASIC_MAP[noteNumber as MidiDrum];
+function padToNoteName(pad: DrumPad): NoteName {
+  return BASIC_MAP_PAD[pad];
 }
 
-export async function triggerMidi(noteNumber: number, velocity: number) {
+export function midiNoteToPad(noteNumber: number): DrumPad | null {
+  return MIDI_TO_PAD[noteNumber] ?? null;
+}
+
+export async function triggerPad(pad: DrumPad, velocity: number) {
   const vel = Math.max(0, Math.min(1, velocity / 127));
   await ensureAudioStarted();
   await getDrumSampler();
-  // If we hit Closed Hi-Hat, choke any ringing Open Hi-Hat first
-  if (noteNumber === MidiDrum.HiHatClosed && vel > 0) {
+  if (pad === DrumPad.HiHatClosed && vel > 0) {
     chokeOpenHiHat();
   }
   if (useSynthFallback) {
-    const voice = mapMidiToVoice(noteNumber);
+    const voice = padToVoice(pad);
     const bus = ensureSynth();
     switch (voice) {
       case 'kick':
@@ -136,7 +169,6 @@ export async function triggerMidi(noteNumber: number, velocity: number) {
         bus.snare.triggerAttackRelease('16n', Tone.now(), vel);
         break;
       case 'hhOpen':
-        // more decay for open
         bus.hat.envelope.decay = 0.3;
         bus.hat.triggerAttackRelease('8n', Tone.now(), 0.5 + vel * 0.5);
         break;
@@ -161,49 +193,57 @@ export async function triggerMidi(noteNumber: number, velocity: number) {
       case 'tomFloor':
         bus.tomFloor.triggerAttackRelease(140, '8n', Tone.now(), vel);
         break;
-      default:
-        break;
     }
     return;
   }
-  const noteName = mapMidi(noteNumber);
-  if (!noteName) return;
-  // For one-shot drum samples let them ring naturally.
+  const noteName = padToNoteName(pad);
   sampler!.triggerAttack(noteName, Tone.now(), vel);
 }
 
+// Back-compat thin adapter for raw MIDI input
+export async function triggerMidi(noteNumber: number, velocity: number) {
+  const pad = midiNoteToPad(noteNumber);
+  if (!pad) return;
+  return triggerPad(pad, velocity);
+}
+
 type Voice = 'kick' | 'snare' | 'hhClosed' | 'hhOpen' | 'crash' | 'ride' | 'tomHigh' | 'tomMid' | 'tomFloor';
-function mapMidiToVoice(noteNumber: number): Voice {
-  switch (noteNumber) {
-    case MidiDrum.Kick:
+function padToVoice(pad: DrumPad): Voice {
+  switch (pad) {
+    case DrumPad.Kick:
       return 'kick';
-    case MidiDrum.Snare:
+    case DrumPad.Snare:
       return 'snare';
-    case MidiDrum.HiHatOpen:
+    case DrumPad.HiHatOpen:
       return 'hhOpen';
-    case MidiDrum.HiHatClosed:
+    case DrumPad.HiHatClosed:
       return 'hhClosed';
-    case MidiDrum.Crash:
+    case DrumPad.Crash:
       return 'crash';
-    case MidiDrum.Ride:
+    case DrumPad.Ride:
       return 'ride';
-    case MidiDrum.TomHigh:
+    case DrumPad.TomHigh:
       return 'tomHigh';
-    case MidiDrum.TomMid:
+    case DrumPad.TomMid:
       return 'tomMid';
-    case MidiDrum.TomFloor:
+    case DrumPad.TomFloor:
       return 'tomFloor';
-    default:
-      // default to snare if unmapped (should not happen when BASIC_MAP is used)
-      return 'snare';
   }
 }
 
-export function listMappedNotes() {
-  const keys = Object.keys(BASIC_MAP)
-    .map(k => Number(k))
-    .sort((a, b) => a - b);
-  return keys.map(k => ({ midi: k, note: BASIC_MAP[k as MidiDrum] }));
+export function listDrumPads() {
+  const pads: DrumPad[] = [
+    DrumPad.Kick,
+    DrumPad.Snare,
+    DrumPad.HiHatClosed,
+    DrumPad.HiHatOpen,
+    DrumPad.Crash,
+    DrumPad.Ride,
+    DrumPad.TomHigh,
+    DrumPad.TomMid,
+    DrumPad.TomFloor,
+  ];
+  return pads.map(p => ({ pad: p, midi: PAD_TO_MIDI[p] as number, label: p }));
 }
 
 function chokeOpenHiHat() {

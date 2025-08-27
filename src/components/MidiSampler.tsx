@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import MidiDevicePicker from './MidiDevicePicker';
 import { initMidiListenerForInput } from '../midi/midi';
-import { ensureAudioStarted, getDrumSampler, listMappedNotes, triggerMidi, isUsingFallback } from '../audio/sampler';
+import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad } from '../audio/sampler';
 import * as Tone from 'tone';
 
 export default function MidiSampler() {
@@ -35,10 +35,10 @@ export default function MidiSampler() {
     };
   }, [selectedId]);
 
-  const pads = useMemo(() => listMappedNotes().sort((a, b) => a.midi - b.midi), []);
+  const pads = useMemo(() => listDrumPads(), []);
 
-  const handlePad = useCallback(async (midi: number) => {
-    await triggerMidi(midi, 100);
+  const handlePad = useCallback(async (pad: DrumPad) => {
+    await triggerPad(pad, 100);
   }, []);
 
   const enableAudio = useCallback(async () => {
@@ -79,11 +79,11 @@ export default function MidiSampler() {
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
         {pads.map(p => (
           <button
-            key={p.midi}
-            onClick={() => handlePad(p.midi)}
+            key={p.pad}
+            onClick={() => handlePad(p.pad)}
             className="px-3 py-4 rounded border border-gray-700 text-gray-200 hover:border-indigo-500 hover:text-white active:scale-95 transition"
           >
-            <div className="text-lg font-semibold">{p.note}</div>
+            <div className="text-lg font-semibold">{p.label}</div>
             <div className="text-xs text-gray-400">{p.midi}</div>
           </button>
         ))}
