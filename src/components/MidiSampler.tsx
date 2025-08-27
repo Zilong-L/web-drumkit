@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import MidiDevicePicker from './MidiDevicePicker';
 import { initMidiListenerForInput } from '../midi/midi';
-import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad } from '../audio/sampler';
+import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad, getSnareVariant, setSnareVariant } from '../audio/sampler';
 import * as Tone from 'tone';
 
 export default function MidiSampler() {
@@ -10,6 +10,7 @@ export default function MidiSampler() {
   const [last, setLast] = useState<{ note?: number; velocity?: number }>({});
   const [audioReady, setAudioReady] = useState<boolean>(Tone.getContext().state === 'running');
   const [engine, setEngine] = useState<'samples' | 'synth'>(() => (isUsingFallback() ? 'synth' : 'samples'));
+  const [snareVariant, setSnareVar] = useState<'14' | '18'>(getSnareVariant());
 
   useEffect(() => {
     let disposed = false;
@@ -60,7 +61,7 @@ export default function MidiSampler() {
       </p>
       <div className="flex items-center justify-between gap-3">
         <MidiDevicePicker
-        onSelect={(id) => {
+          onSelect={(id) => {
           setSelectedId(id || null);
         }}
         />
@@ -73,7 +74,22 @@ export default function MidiSampler() {
             Enable Audio
           </button>
         ) : (
-          <span className="text-xs px-2 py-1 rounded border border-green-700 text-green-400">Audio: {engine === 'samples' ? 'Samples' : 'Synth fallback'}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2 py-1 rounded border border-green-700 text-green-400">Audio: {engine === 'samples' ? 'Samples' : 'Synth fallback'}</span>
+            <label className="text-xs text-gray-400">Snare</label>
+            <select
+              className="text-xs bg-transparent border border-gray-700 rounded px-2 py-1"
+              value={snareVariant}
+              onChange={e => {
+                const v = (e.target.value as '14' | '18');
+                setSnareVar(v);
+                setSnareVariant(v);
+              }}
+            >
+              <option value="14">14</option>
+              <option value="18">18</option>
+            </select>
+          </div>
         )}
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">

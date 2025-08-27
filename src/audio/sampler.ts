@@ -1,12 +1,24 @@
 import * as Tone from 'tone';
 
 // Primary note names used by our sample set
-type NoteName = 'C2' | 'D2' | 'F#2' | 'A#2' | 'C#3' | 'D#3' | 'C3' | 'A2' | 'F2';
+type NoteName =
+  | 'C2' // Kick
+  | 'D2' // Snare 14
+  | 'E2' // Snare 18 (alt)
+  | 'D#2' // Side Stick
+  | 'F#2' // HH Closed
+  | 'A#2' // HH Open
+  | 'C#3' // Crash
+  | 'D#3' // Ride
+  | 'C3' // Tom High
+  | 'A2' // Tom Mid
+  | 'F2'; // Tom Floor
 
 // Semantic drum pads (avoid magic numbers in the app)
 export enum DrumPad {
   Kick = 'Kick',
   Snare = 'Snare',
+  SideStick = 'SideStick',
   HiHatClosed = 'HiHatClosed',
   HiHatOpen = 'HiHatOpen',
   Crash = 'Crash',
@@ -20,6 +32,7 @@ export enum DrumPad {
 export enum MidiDrum {
   Kick = 36, // Bass Drum 1
   Snare = 38, // Acoustic Snare
+  SideStick = 37, // Side Stick
   HiHatClosed = 42, // Closed Hi-Hat
   HiHatOpen = 46, // Open Hi-Hat
   Crash = 49, // Crash Cymbal 1
@@ -33,6 +46,7 @@ export enum MidiDrum {
 const PAD_TO_MIDI: Record<DrumPad, MidiDrum> = {
   [DrumPad.Kick]: MidiDrum.Kick,
   [DrumPad.Snare]: MidiDrum.Snare,
+  [DrumPad.SideStick]: MidiDrum.SideStick,
   [DrumPad.HiHatClosed]: MidiDrum.HiHatClosed,
   [DrumPad.HiHatOpen]: MidiDrum.HiHatOpen,
   [DrumPad.Crash]: MidiDrum.Crash,
@@ -50,6 +64,7 @@ const MIDI_TO_PAD: Record<number, DrumPad> = Object.fromEntries(
 const BASIC_MAP_PAD: Record<DrumPad, NoteName> = {
   [DrumPad.Kick]: 'C2',
   [DrumPad.Snare]: 'D2',
+  [DrumPad.SideStick]: 'D#2',
   [DrumPad.HiHatClosed]: 'F#2',
   [DrumPad.HiHatOpen]: 'A#2',
   [DrumPad.Crash]: 'C#3',
@@ -61,17 +76,21 @@ const BASIC_MAP_PAD: Record<DrumPad, NoteName> = {
 
 // Map some local samples to note names above
 // Using Vite asset URLs so these files are bundled and served correctly.
+// Brand-qualified paths under public/samples/<Brand>/
+const BRAND = 'GSCW';
+const base = `/samples/${BRAND}`;
 const urls: Record<NoteName, string> = {
-  // Served from Vite's public/ directory: /samples/*.wav
-  C2: '/samples/kick.wav',
-  D2: '/samples/snare.wav',
-  'F#2': '/samples/hh-closed.wav',
-  'A#2': '/samples/hh-open.wav',
-  'C#3': '/samples/crash.wav',
-  'D#3': '/samples/ride.wav',
-  C3: '/samples/tom-high.wav',
-  A2: '/samples/tom-mid.wav',
-  F2: '/samples/tom-floor.wav',
+  C2: `${base}/kick.wav`,
+  D2: `${base}/snare-14.wav`,
+  E2: `${base}/snare-18.wav`,
+  'D#2': `${base}/stick.wav`,
+  'F#2': `${base}/hh-closed.wav`,
+  'A#2': `${base}/hh-open.wav`,
+  'C#3': `${base}/crash.wav`,
+  'D#3': `${base}/ride.wav`,
+  C3: `${base}/tom-high.wav`,
+  A2: `${base}/tom-mid.wav`,
+  F2: `${base}/tom-floor.wav`,
 };
 
 let loaded: Promise<Tone.Sampler> | null = null;
@@ -144,6 +163,9 @@ export async function getDrumSampler() {
 }
 
 function padToNoteName(pad: DrumPad): NoteName {
+  if (pad === DrumPad.Snare) {
+    return currentSnareVariant === '18' ? 'E2' : 'D2';
+  }
   return BASIC_MAP_PAD[pad];
 }
 
@@ -228,13 +250,17 @@ function padToVoice(pad: DrumPad): Voice {
       return 'tomMid';
     case DrumPad.TomFloor:
       return 'tomFloor';
+    case DrumPad.SideStick:
+      return 'snare';
   }
+  return 'snare';
 }
 
 export function listDrumPads() {
   const pads: DrumPad[] = [
     DrumPad.Kick,
     DrumPad.Snare,
+    DrumPad.SideStick,
     DrumPad.HiHatClosed,
     DrumPad.HiHatOpen,
     DrumPad.Crash,
@@ -244,6 +270,15 @@ export function listDrumPads() {
     DrumPad.TomFloor,
   ];
   return pads.map(p => ({ pad: p, midi: PAD_TO_MIDI[p] as number, label: p }));
+}
+
+// Snare variant control
+let currentSnareVariant: '14' | '18' = '14';
+export function setSnareVariant(v: '14' | '18') {
+  currentSnareVariant = v;
+}
+export function getSnareVariant() {
+  return currentSnareVariant;
 }
 
 function chokeOpenHiHat() {
