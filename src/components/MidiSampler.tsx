@@ -1,0 +1,103 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import MidiDevicePicker from './MidiDevicePicker';
+import { initMidiCcListenerForInput, initMidiListenerForInput } from '../midi/midi';
+import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad, MidiCC, setHiHatOpenByCC4 } from '../audio/sampler';
+import * as Tone from 'tone';
+
+export default function MidiSampler() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [last, setLast] = useState<{ note?: number; velocity?: number }>({});
+  const [audioReady, setAudioReady] = useState<boolean>(Tone.getContext().state === 'running');
+  const [engine, setEngine] = useState<'samples' | 'synth'>(() => (isUsingFallback() ? 'synth' : 'samples'));
+  // no crash/snare variant toggles for now
+
+  useEffect(() => {
+    let disposed = false;
+    let disposer: { dispose: () => void } | null = null;
+    let ccDisposer: { dispose: () => void } | null = null;
+    if (!selectedId) return () => {};
+    (async () => {
+      try {
+        const d = await initMidiListenerForInput(selectedId, async (note, vel) => {
+          if (disposed) return;
+          setLast({ note, velocity: vel });
+          if (vel > 0) await triggerMidi(note, vel);
+        });
+        disposer = d;
+        ccDisposer = await initMidiCcListenerForInput(selectedId, (cc, val) => {
+          if (disposed) return;
+          if (cc === MidiCC.FootController) setHiHatOpenByCC4(val);
+        });
+      } catch (e: any) {
+        setError(e?.message || String(e));
+      }
+    })();
+    return () => {
+      disposed = true;
+      try {
+        disposer?.dispose();
+      } catch {}
+      try {
+        ccDisposer?.dispose();
+      } catch {}
+    };
+  }, [selectedId]);
+
+  const pads = useMemo(() => listDrumPads(), []);
+
+  const handlePad = useCallback(async (pad: DrumPad) => {
+    await triggerPad(pad, 100);
+  }, []);
+
+  const enableAudio = useCallback(async () => {
+    try {
+      await ensureAudioStarted();
+      await getDrumSampler(); // preload samples or init synth fallback
+      setEngine(isUsingFallback() ? 'synth' : 'samples');
+      setAudioReady(true);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  }, []);
+
+  return (
+    <div className="w-full max-w-2xl mx-auto space-y-4">
+      <h2 className="text-2xl font-semibold">MIDI Sampler (Tone.js)</h2>
+      <p className="text-sm text-gray-400">
+        Select a MIDI device and hit pads/notes to hear samples.
+      </p>
+      <div className="flex items-center justify-between gap-3">
+        <MidiDevicePicker
+          onSelect={(id) => {
+          setSelectedId(id || null);
+        }}
+        />
+        {!audioReady ? (
+          <button
+            onClick={enableAudio}
+            className="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition text-sm"
+            title="Unlock browser audio and preload samples"
+          >
+            Enable Audio
+          </button>
+        ) : (
+          <span className="text-xs px-2 py-1 rounded border border-green-700 text-green-400">Audio: {engine === 'samples' ? 'Samples' : 'Synth fallback'}</span>
+        )}
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        {pads.map(p => (
+          <button
+            key={p.pad}
+            onClick={() => handlePad(p.pad)}
+            className="px-3 py-4 rounded border border-gray-700 text-gray-200 hover:border-indigo-500 hover:text-white active:scale-95 transition"
+          >
+            <div className="text-lg font-semibold">{p.label}</div>
+          </button>
+        ))}
+      </div>
+      {/* Debug line removed per request: hide note/velocity numbers */}
+      {error && <div className="text-sm text-red-400">{error}</div>}
+    </div>
+  );
+}
