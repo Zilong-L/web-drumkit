@@ -2,20 +2,20 @@ import React from 'react';
 
 type Props = {
   label: string;
-  note: string;
-  trigger: (note: string, velocity?: number) => void;
-  stop?: (note: string) => void;
+  midi: number;
+  trigger: (midi: number, velocity?: number) => void;
+  stop?: (midi: number) => void;
   hotkey?: string; // display only
   active?: boolean;
 };
 
-export const DrumPad: React.FC<Props> = ({ label, note, trigger, stop, hotkey, active }) => {
+export const DrumPad: React.FC<Props> = ({ label, midi, trigger, stop, hotkey, active }) => {
   const onMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     const accent = e.shiftKey ? 120 : 100;
-    trigger(note, accent);
+    trigger(midi, accent);
   };
-  const onMouseUp = () => stop?.(note);
+  const onMouseUp = () => stop?.(midi);
 
   return (
     <button
@@ -36,4 +36,3 @@ export const DrumPad: React.FC<Props> = ({ label, note, trigger, stop, hotkey, a
     </button>
   );
 };
-

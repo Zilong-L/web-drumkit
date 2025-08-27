@@ -2,33 +2,70 @@ import { useMemo, useRef, useState } from 'react';
 import { DrumPadGrid, Pad } from './components/DrumPadGrid';
 import { MockEngine } from './engine/AudioEngine';
 import { useKeyboardPads, KeyMap } from './hooks/useKeyboardPads';
+import { DrumNote, DRUM_LABELS } from './engine/DrumMap';
 
 function App() {
   const engineRef = useRef(new MockEngine());
-  const [lastHit, setLastHit] = useState<string | null>(null);
+  const [lastHit, setLastHit] = useState<number | null>(null);
 
-  const pads: Pad[] = useMemo(
-    () => [
-      { id: 'kick', label: 'Kick', note: 'C1', key: 'a' },
-      { id: 'snare', label: 'Snare', note: 'D1', key: 's' },
-      { id: 'hihat', label: 'Hi-Hat', note: 'F#1', key: 'd' },
-    ],
-    []
-  );
+  const pads: Pad[] = useMemo(() => {
+    const order: DrumNote[] = [
+      DrumNote.Kick,
+      DrumNote.Snare,
+      DrumNote.ClosedHat,
+      DrumNote.OpenHat,
+      DrumNote.LowTom,
+      DrumNote.LowMidTom,
+      DrumNote.HiMidTom,
+      DrumNote.HighTom,
+      DrumNote.Crash1,
+      DrumNote.Ride1,
+      DrumNote.SideStick,
+      DrumNote.Clap,
+    ];
+    const defaultKeys: Record<DrumNote, string | undefined> = {
+      [DrumNote.Kick]: 'a',
+      [DrumNote.Snare]: 's',
+      [DrumNote.ClosedHat]: 'd',
+      [DrumNote.OpenHat]: 'f',
+      [DrumNote.LowTom]: 'g',
+      [DrumNote.LowMidTom]: 'h',
+      [DrumNote.HiMidTom]: 'j',
+      [DrumNote.HighTom]: 'k',
+      [DrumNote.Crash1]: 'u',
+      [DrumNote.Ride1]: 'i',
+      [DrumNote.SideStick]: 'l',
+      [DrumNote.Clap]: ';',
+      // Unused in grid but present in enum can be added later
+      [DrumNote.ElectricSnare]: undefined,
+      [DrumNote.LowFloorTom]: undefined,
+      [DrumNote.HighFloorTom]: undefined,
+      [DrumNote.PedalHat]: undefined,
+      [DrumNote.RideBell]: undefined,
+    } as any;
+    return order.map((midi, idx) => ({
+      id: `${midi}-${idx}`,
+      label: DRUM_LABELS[midi],
+      midi,
+      key: defaultKeys[midi],
+    }));
+  }, []);
 
-  const keyMap: KeyMap = useMemo(
-    () => ({ a: { note: 'C1' }, s: { note: 'D1' }, d: { note: 'F#1' } }),
-    []
-  );
+  const keyMap: KeyMap = useMemo(() => {
+    const entries: [string, { midi: number }] [] = [];
+    pads.forEach((p) => {
+      if (p.key) entries.push([p.key, { midi: p.midi }]);
+    });
+    return Object.fromEntries(entries);
+  }, [pads]);
 
   useKeyboardPads(keyMap, {
-    onTrigger: (note, velocity) => {
-      engineRef.current.play(note, { velocity });
-      setLastHit(note);
-      // Reset highlight shortly after
-      setTimeout(() => setLastHit((n) => (n === note ? null : n)), 80);
+    onTrigger: (midi, velocity) => {
+      engineRef.current.play(midi, { velocity });
+      setLastHit(midi);
+      setTimeout(() => setLastHit((n) => (n === midi ? null : n)), 80);
     },
-    onRelease: (note) => engineRef.current.stop(note),
+    onRelease: (midi) => engineRef.current.stop(midi),
   });
 
   return (
@@ -37,11 +74,11 @@ function App() {
       <p className="text-gray-400">A minimal pad UI with keyboard mapping</p>
       <DrumPadGrid
         pads={pads}
-        activeNote={lastHit || undefined}
-        onTrigger={(n, v) => engineRef.current.play(n, { velocity: v })}
-        onStop={(n) => engineRef.current.stop(n)}
+        activeMidi={lastHit ?? undefined}
+        onTrigger={(m, v) => engineRef.current.play(m, { velocity: v })}
+        onStop={(m) => engineRef.current.stop(m)}
       />
-      <p className="text-xs text-gray-500">Hotkeys: A (Kick), S (Snare), D (Hi-Hat). Hold Shift for accent.</p>
+      <p className="text-xs text-gray-500">Hold Shift for accent velocity. More pads mapped to GM drums.</p>
     </div>
   );
 }

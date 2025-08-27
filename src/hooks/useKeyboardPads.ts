@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 
-export type KeyMap = Record<string, { note: string; velocity?: number }>;
+export type KeyMap = Record<string, { midi: number; velocity?: number }>;
 
 type Options = {
-  onTrigger: (note: string, velocity?: number) => void;
-  onRelease?: (note: string) => void;
+  onTrigger: (midi: number, velocity?: number) => void;
+  onRelease?: (midi: number) => void;
 };
 
 export function useKeyboardPads(map: KeyMap, opts: Options) {
@@ -12,13 +12,14 @@ export function useKeyboardPads(map: KeyMap, opts: Options) {
     const down = new Set<string>();
     const handleDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
+      if (e.repeat) return; // ignore auto-repeat
       if (down.has(k)) return;
       const m = map[k];
       if (m) {
         e.preventDefault();
         down.add(k);
         const vel = typeof m.velocity === 'number' ? m.velocity : e.shiftKey ? 120 : 100;
-        opts.onTrigger(m.note, vel);
+        opts.onTrigger(m.midi, vel);
       }
     };
     const handleUp = (e: KeyboardEvent) => {
@@ -27,7 +28,7 @@ export function useKeyboardPads(map: KeyMap, opts: Options) {
       if (m) {
         e.preventDefault();
         down.delete(k);
-        opts.onRelease?.(m.note);
+        opts.onRelease?.(m.midi);
       }
     };
     window.addEventListener('keydown', handleDown);
@@ -38,4 +39,3 @@ export function useKeyboardPads(map: KeyMap, opts: Options) {
     };
   }, [map, opts]);
 }
-
