@@ -17,7 +17,7 @@ type Props = {
 
 export const DrumPadGrid: React.FC<Props> = ({ pads, activeMidi, onTrigger, onStop }) => {
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-4 gap-4">
       {pads.map((p) => (
         <DrumPad
           key={p.id}
