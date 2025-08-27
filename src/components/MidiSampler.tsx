@@ -96,9 +96,7 @@ export default function MidiSampler() {
           </button>
         ))}
       </div>
-      <div className="text-sm text-gray-400">
-        Last: note {last.note ?? '-'} vel {last.velocity ?? '-'}
-      </div>
+      {/* Debug line removed per request: hide note/velocity numbers */}
       {error && <div className="text-sm text-red-400">{error}</div>}
     </div>
   );
