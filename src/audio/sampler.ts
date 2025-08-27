@@ -76,21 +76,20 @@ const BASIC_MAP_PAD: Record<DrumPad, NoteName> = {
 
 // Map some local samples to note names above
 // Using Vite asset URLs so these files are bundled and served correctly.
-// Brand-qualified paths under public/samples/<Brand>/
+// Brand-qualified paths under drum-samples/<Brand>/
 const BRAND = 'GSCW';
-const base = `/samples/${BRAND}`;
 const urls: Record<NoteName, string> = {
-  C2: `${base}/kick.wav`,
-  D2: `${base}/snare-14.wav`,
-  E2: `${base}/snare-18.wav`,
-  'D#2': `${base}/stick.wav`,
-  'F#2': `${base}/hh-closed.wav`,
-  'A#2': `${base}/hh-open.wav`,
-  'C#3': `${base}/crash.wav`,
-  'D#3': `${base}/ride.wav`,
-  C3: `${base}/tom-high.wav`,
-  A2: `${base}/tom-mid.wav`,
-  F2: `${base}/tom-floor.wav`,
+  C2: new URL(`../../drum-samples/${BRAND}/kick.wav`, import.meta.url).href,
+  D2: new URL(`../../drum-samples/${BRAND}/snare-14.wav`, import.meta.url).href,
+  E2: new URL(`../../drum-samples/${BRAND}/snare-18.wav`, import.meta.url).href,
+  'D#2': new URL(`../../drum-samples/${BRAND}/stick.wav`, import.meta.url).href,
+  'F#2': new URL(`../../drum-samples/${BRAND}/hh-closed.wav`, import.meta.url).href,
+  'A#2': new URL(`../../drum-samples/${BRAND}/hh-open.wav`, import.meta.url).href,
+  'C#3': new URL(`../../drum-samples/${BRAND}/crash.wav`, import.meta.url).href,
+  'D#3': new URL(`../../drum-samples/${BRAND}/ride.wav`, import.meta.url).href,
+  C3: new URL(`../../drum-samples/${BRAND}/tom-high.wav`, import.meta.url).href,
+  A2: new URL(`../../drum-samples/${BRAND}/tom-mid.wav`, import.meta.url).href,
+  F2: new URL(`../../drum-samples/${BRAND}/tom-floor.wav`, import.meta.url).href,
 };
 
 let loaded: Promise<Tone.Sampler> | null = null;
