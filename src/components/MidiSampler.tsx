@@ -300,7 +300,7 @@ export default function MidiSampler() {
                 </div>
               <button className="text-slate-300 hover:text-white" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); setConflictMidi(null); }}>×</button>
               </div>
-            {/* Warnings are placed within sections below to avoid layout shift at header */}
+            {/* Settings content */}
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-700 p-3">
                 <div className="flex items-center justify-between mb-2">
@@ -339,9 +339,9 @@ export default function MidiSampler() {
                     <span className="text-lg leading-none">+</span>
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2 min-h-[56px]">
+                <div className="flex flex-wrap gap-2 min-h-16">
                   {(bindings[modalForMidi]?.keys || []).map(k => (
-                    <span key={k} className="text-sm md:text-base bg-indigo-500/10 border border-indigo-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
+                    <span key={k} className="whitespace-nowrap text-sm md:text-base bg-indigo-500/10 border border-indigo-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
                       {k.toUpperCase()}
                       <button
                         aria-label="Remove"
@@ -386,9 +386,9 @@ export default function MidiSampler() {
                     <span className="text-lg leading-none">+</span>
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2 min-h-[56px]">
+                <div className="flex flex-wrap gap-2 min-h-16">
                   {(bindings[modalForMidi]?.midis || []).map(n => (
-                    <span key={n} className="text-sm md:text-base bg-emerald-500/10 border border-emerald-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
+                    <span key={n} className="whitespace-nowrap text-sm md:text-base bg-emerald-500/10 border border-emerald-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
                       {midiNumberToName(n)} ({n})
                       <button
                         aria-label="Remove"
@@ -407,8 +407,14 @@ export default function MidiSampler() {
                     <span className="text-xs text-slate-400">No mapping</span>
                   )}
                 </div>
+              </div>
+              {/* Bottom warnings outside the sections */}
+              <div className="pt-1 min-h-6">
                 {conflictMidi && (
-                  <div className="mt-2 text-xs text-amber-300">Warning: MIDI note {midiNumberToName(conflictMidi.note)} ({conflictMidi.note}) is already used by {conflictMidi.ownerLabel}.</div>
+                  <div className="text-xs text-amber-300">Warning: MIDI note {midiNumberToName(conflictMidi.note)} ({conflictMidi.note}) is already used by {conflictMidi.ownerLabel}.</div>
+                )}
+                {!conflictMidi && conflictKey && (
+                  <div className="text-xs text-amber-300">Warning: key "{conflictKey.toUpperCase()}" is already used by another sound.</div>
                 )}
               </div>
             </div>
