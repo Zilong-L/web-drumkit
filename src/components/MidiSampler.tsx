@@ -339,7 +339,7 @@ export default function MidiSampler() {
                     <span className="text-lg leading-none">+</span>
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2 min-h-16">
+                <div className="flex flex-nowrap items-center gap-2 h-10 overflow-x-auto">
                   {(bindings[modalForMidi]?.keys || []).map(k => (
                     <span key={k} className="whitespace-nowrap text-sm md:text-base bg-indigo-500/10 border border-indigo-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
                       {k.toUpperCase()}
@@ -386,7 +386,7 @@ export default function MidiSampler() {
                     <span className="text-lg leading-none">+</span>
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2 min-h-16">
+                <div className="flex flex-nowrap items-center gap-2 h-10 overflow-x-auto">
                   {(bindings[modalForMidi]?.midis || []).map(n => (
                     <span key={n} className="whitespace-nowrap text-sm md:text-base bg-emerald-500/10 border border-emerald-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
                       {midiNumberToName(n)} ({n})
