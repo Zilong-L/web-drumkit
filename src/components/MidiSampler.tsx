@@ -27,7 +27,7 @@ export default function MidiSampler() {
   const [listenKeyForMidi, setListenKeyForMidi] = useState<number | null>(null);
   const [listenMidiForMidi, setListenMidiForMidi] = useState<number | null>(null); // target pad midi we capture for
   const [conflictKey, setConflictKey] = useState<string | null>(null);
-  const [conflictMidiNote, setConflictMidiNote] = useState<number | null>(null);
+  const [conflictMidi, setConflictMidi] = useState<{ note: number; ownerLabel: string } | null>(null);
   // no crash/snare variant toggles for now
 
   // Refs to always read latest data inside MIDI handler without stale closures
@@ -47,11 +47,21 @@ export default function MidiSampler() {
           // If we are capturing a MIDI note for binding, record and skip normal triggering
           if (listenMidiForMidi != null && vel > 0) {
             // Prevent duplicate MIDI mapping used by another sound
-            const duplicate = Object.entries(bindingsRef.current).some(([m, b]) => Number(m) !== listenMidiForMidi && (b?.midis || []).includes(note));
+            let ownerLabel: string | null = null;
+            for (const [m, b] of Object.entries(bindingsRef.current)) {
+              const target = Number(m);
+              if (target !== listenMidiForMidi && (b?.midis || []).includes(note)) {
+                ownerLabel = midiToLabel[target] || 'another sound';
+                break;
+              }
+            }
             // Prevent binding a GM default note that belongs to another sound
             const isDefaultMidi = defaultMidiSetRef.current.has(note) && note !== listenMidiForMidi;
-            if (duplicate || isDefaultMidi) {
-              setConflictMidiNote(note);
+            if (isDefaultMidi && !ownerLabel) {
+              ownerLabel = midiToLabel[note] || 'another sound';
+            }
+            if (ownerLabel) {
+              setConflictMidi({ note, ownerLabel });
               setListenMidiForMidi(null);
               return;
             }
@@ -147,6 +157,7 @@ export default function MidiSampler() {
       if (midi != null) {
         setModalForMidi(midi);
         setConflictKey(null);
+        setConflictMidi(null);
       }
       return;
     }
@@ -287,16 +298,9 @@ export default function MidiSampler() {
                   <div className="text-sm text-slate-400">Binding for</div>
                   <div className="text-lg font-semibold">{pads.find(p => p.midi === modalForMidi)?.label}</div>
                 </div>
-              <button className="text-slate-300 hover:text-white" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); setConflictMidiNote(null); }}>×</button>
+              <button className="text-slate-300 hover:text-white" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); setConflictMidi(null); }}>×</button>
               </div>
-            {conflictKey && (
-              <div className="mb-2 text-xs text-amber-300">Warning: key "{conflictKey.toUpperCase()}" is already used by another sound.</div>
-            )}
-            {conflictMidiNote != null && (
-              <div className="mb-2 text-xs text-amber-300">
-                Warning: MIDI note {midiNumberToName(conflictMidiNote)} ({conflictMidiNote}) is already used by another sound{defaultMidiSetRef.current.has(conflictMidiNote) ? ` (default: ${midiToLabel[conflictMidiNote]})` : ''}.
-              </div>
-            )}
+            {/* Warnings are placed within sections below to avoid layout shift at header */}
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-700 p-3">
                 <div className="flex items-center justify-between mb-2">
@@ -335,7 +339,7 @@ export default function MidiSampler() {
                     <span className="text-lg leading-none">+</span>
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 min-h-[56px]">
                   {(bindings[modalForMidi]?.keys || []).map(k => (
                     <span key={k} className="text-sm md:text-base bg-indigo-500/10 border border-indigo-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
                       {k.toUpperCase()}
@@ -375,14 +379,14 @@ export default function MidiSampler() {
                     if (!selectedId) return;
                     setListenKeyForMidi(null);
                     setConflictKey(null);
-                    setConflictMidiNote(null);
+                    setConflictMidi(null);
                     setListenMidiForMidi(modalForMidi);
                   }}
                   >
                     <span className="text-lg leading-none">+</span>
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 min-h-[56px]">
                   {(bindings[modalForMidi]?.midis || []).map(n => (
                     <span key={n} className="text-sm md:text-base bg-emerald-500/10 border border-emerald-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
                       {midiNumberToName(n)} ({n})
@@ -403,10 +407,13 @@ export default function MidiSampler() {
                     <span className="text-xs text-slate-400">No mapping</span>
                   )}
                 </div>
+                {conflictMidi && (
+                  <div className="mt-2 text-xs text-amber-300">Warning: MIDI note {midiNumberToName(conflictMidi.note)} ({conflictMidi.note}) is already used by {conflictMidi.ownerLabel}.</div>
+                )}
               </div>
             </div>
             <div className="mt-4 flex items-center justify-end gap-2">
-              <button className="text-xs px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); }}>Close</button>
+              <button className="text-xs px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); setConflictMidi(null); }}>Close</button>
             </div>
           </div>
         </div>
