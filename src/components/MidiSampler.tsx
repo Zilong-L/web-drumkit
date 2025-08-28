@@ -238,10 +238,9 @@ export default function MidiSampler() {
       </div>
       <div className="relative">
         <button
-          title={editMode ? 'Exit edit mode' : 'Edit bindings'}
           onClick={() => setEditMode(v => !v)}
           className={
-            'absolute -top-2 right-0 z-20 p-2 rounded border ' +
+            'absolute bottom-2 right-2 z-20 p-2 rounded-full border shadow ' +
             (editMode ? 'bg-amber-600/20 border-amber-400 text-amber-200' : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700')
           }
         >
@@ -254,10 +253,7 @@ export default function MidiSampler() {
             <div className="text-sm text-indigo-200">Loading samples…</div>
           </div>
         )}
-        {editMode && (
-          <div className="absolute left-0 top-0 z-10 text-xs text-amber-300 px-2 py-1">Edit mode: click a pad to bind</div>
-        )}
-        <div className={"grid grid-cols-3 sm:grid-cols-6 gap-2 " + (loading ? 'pointer-events-none opacity-50' : '')}>
+        <div className={"grid grid-cols-3 sm:grid-cols-6 gap-2 pr-10 pb-12 " + (loading ? 'pointer-events-none opacity-50' : '')}>
           {pads.map(p => (
             <button
               key={p.pad}
@@ -273,9 +269,6 @@ export default function MidiSampler() {
               }
             >
               <div className="text-lg font-semibold">{p.label}</div>
-              {editMode && (
-                <span className="absolute top-1 right-2 text-[10px] text-amber-300">edit</span>
-              )}
             </button>
           ))}
         </div>
