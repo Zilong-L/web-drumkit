@@ -4,7 +4,16 @@ import { initMidiCcListenerForInput, initMidiListenerForInput } from '../midi/mi
 import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad, MidiCC, setHiHatOpenByCC4 } from '../audio/sampler';
 import * as Tone from 'tone';
 import { useKeyboardPads, KeyMap } from '../hooks/useKeyboardPads';
-import { KeyMappingEditor, MidiToKeys } from './KeyMappingEditor';
+
+type PadBinding = { keys: string[]; midis: number[] };
+type PadBindings = Record<number, PadBinding>; // target midi -> bindings
+
+function midiNumberToName(n: number) {
+  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const octave = Math.floor(n / 12) - 1;
+  const name = names[n % 12];
+  return `${name}${octave}`;
+}
 
 export default function MidiSampler() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -13,6 +22,11 @@ export default function MidiSampler() {
   const [flashPad, setFlashPad] = useState<DrumPad | null>(null);
   const [engine, setEngine] = useState<'samples' | 'synth'>(() => (isUsingFallback() ? 'synth' : 'samples'));
   const [loading, setLoading] = useState<boolean>(true);
+  const [editMode, setEditMode] = useState<boolean>(false);
+  const [modalForMidi, setModalForMidi] = useState<number | null>(null); // target pad midi
+  const [listenKeyForMidi, setListenKeyForMidi] = useState<number | null>(null);
+  const [listenMidiForMidi, setListenMidiForMidi] = useState<number | null>(null); // target pad midi we capture for
+  const [conflictKey, setConflictKey] = useState<string | null>(null);
   // no crash/snare variant toggles for now
 
   useEffect(() => {
@@ -25,12 +39,30 @@ export default function MidiSampler() {
         const d = await initMidiListenerForInput(selectedId, async (note, vel) => {
           if (disposed) return;
           setLast({ note, velocity: vel });
-          const pad = midiNoteToPad(note);
-          if (vel > 0 && pad) {
-            setFlashPad(pad);
-            setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
+          // If we are capturing a MIDI note for binding, record and skip normal triggering
+          if (listenMidiForMidi != null && vel > 0) {
+            setBindings(prev => {
+              const t = listenMidiForMidi;
+              const cur = prev[t] || { keys: [], midis: [] };
+              if (!cur.midis.includes(note)) {
+                const next = { ...prev, [t]: { ...cur, midis: [...cur.midis, note] } } as PadBindings;
+                try { localStorage.setItem(BINDING_KEY, JSON.stringify(next)); } catch {}
+                return next;
+              }
+              return prev;
+            });
+            setListenMidiForMidi(null);
+            return;
           }
-          if (vel > 0) await triggerMidi(note, vel);
+          const resolved = resolveIncomingMidi(note);
+          if (vel > 0 && resolved != null) {
+            const pad = midiNoteToPad(resolved);
+            if (pad) {
+              setFlashPad(pad);
+              setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
+            }
+          }
+          if (vel > 0) await triggerMidi(resolved ?? note, vel);
         });
         disposer = d;
         ccDisposer = await initMidiCcListenerForInput(selectedId, (cc, val) => {
@@ -50,7 +82,7 @@ export default function MidiSampler() {
         ccDisposer?.dispose();
       } catch {}
     };
-  }, [selectedId]);
+  }, [selectedId, listenMidiForMidi]);
 
   const allPads = useMemo(() => listDrumPads(), []);
   const order: DrumPad[] = [
@@ -86,41 +118,71 @@ export default function MidiSampler() {
 
   const handlePad = useCallback(async (pad: DrumPad) => {
     if (loading) return; // ignore interaction while loading
+    if (editMode) {
+      const midi = padsByPad.get(pad)?.midi;
+      if (midi != null) {
+        setModalForMidi(midi);
+        setConflictKey(null);
+      }
+      return;
+    }
     setFlashPad(pad);
     setTimeout(() => setFlashPad(prev => (prev === pad ? null : prev)), 120);
     await triggerPad(pad, 100);
-  }, [loading]);
+  }, [loading, editMode]);
 
-  // Keyboard mapping: multiple keys per drum with persistence
-  const STORAGE_KEY = 'drum_keymap_v1';
-  const [midiToKeys, setMidiToKeys] = useState<MidiToKeys>(() => {
+  // Bindings (keys + extra MIDI notes) with persistence
+  const BINDING_KEY = 'drum_bindings_v1';
+  const LEGACY_KEYMAP_KEY = 'drum_keymap_v1';
+  const [bindings, setBindings] = useState<PadBindings>(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(BINDING_KEY);
       if (raw) return JSON.parse(raw);
     } catch {}
-    // Default mapping across common pads
-    const defaults: Array<[string, number]> = [];
+    // migrate legacy midiToKeys if present
+    let migrated: PadBindings | null = null;
+    try {
+      const legacy = localStorage.getItem(LEGACY_KEYMAP_KEY);
+      if (legacy) {
+        const parsed: Record<number, string[]> = JSON.parse(legacy);
+        migrated = Object.fromEntries(
+          Object.entries(parsed).map(([m, keys]) => [Number(m), { keys, midis: [] }])
+        ) as PadBindings;
+      }
+    } catch {}
+    if (migrated) return migrated;
+    // Default mapping across common pads (keys only)
     const orderKeys = ['a','s','d','f','g','h','j','k','u','i','l',';'];
-    pads.slice(0, orderKeys.length).forEach((p, idx) => defaults.push([orderKeys[idx], p.midi]));
-    const init: MidiToKeys = {};
-    defaults.forEach(([k, m]) => {
-      init[m] = [...(init[m] || []), k];
+    const init: PadBindings = {};
+    pads.slice(0, orderKeys.length).forEach((p, idx) => {
+      init[p.midi] = { keys: [orderKeys[idx]], midis: [] };
     });
     return init;
   });
 
+  const padsByPad = useMemo(() => new Map(allPads.map(p => [p.pad, p])), [allPads]);
+
   const keyMap: KeyMap = useMemo(() => {
     const entries: [string, { midi: number } ][] = [];
-    Object.entries(midiToKeys).forEach(([midi, keys]) => {
-      keys.forEach((k) => entries.push([k, { midi: Number(midi) }]));
+    Object.entries(bindings).forEach(([midi, b]) => {
+      (b?.keys || []).forEach((k) => entries.push([k, { midi: Number(midi) }]));
     });
     return Object.fromEntries(entries);
-  }, [midiToKeys]);
+  }, [bindings]);
 
-  const persistMapping = (next: MidiToKeys) => {
-    setMidiToKeys(next);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+  const persistBindings = (next: PadBindings) => {
+    setBindings(next);
+    try { localStorage.setItem(BINDING_KEY, JSON.stringify(next)); } catch {}
   };
+
+  const resolveIncomingMidi = useCallback((incoming: number) => {
+    // if any binding contains this incoming midi, route to that target midi
+    for (const [targetStr, b] of Object.entries(bindings)) {
+      if (b?.midis?.includes(incoming)) return Number(targetStr);
+    }
+    // otherwise, leave as-is
+    return incoming;
+  }, [bindings]);
 
   useKeyboardPads(keyMap, {
     onTrigger: async (midi, velocity = 100) => {
@@ -160,10 +222,25 @@ export default function MidiSampler() {
         </div>
       </div>
       <div className="relative">
+        <button
+          title={editMode ? 'Exit edit mode' : 'Edit bindings'}
+          onClick={() => setEditMode(v => !v)}
+          className={
+            'absolute -top-2 right-0 z-20 p-2 rounded border ' +
+            (editMode ? 'bg-amber-600/20 border-amber-400 text-amber-200' : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700')
+          }
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+            <path d="M19.14,12.94a7.52,7.52,0,0,0,.06-1,7.52,7.52,0,0,0-.06-1l2.11-1.65a.5.5,0,0,0,.12-.64l-2-3.46a.5.5,0,0,0-.6-.22l-2.49,1a7.27,7.27,0,0,0-1.73-1L14.5,1.81A.5.5,0,0,0,14,1.5H10a.5.5,0,0,0-.5.31L8.65,4A7.27,7.27,0,0,0,6.92,5L4.43,4a.5.5,0,0,0-.6.22l-2,3.46a.5.5,0,0,0,.12.64L4.06,9.94a7.52,7.52,0,0,0-.06,1,7.52,7.52,0,0,0,.06,1L1.95,13.59a.5.5,0,0,0-.12.64l2,3.46a.5.5,0,0,0,.6.22l2.49-1a7.27,7.27,0,0,0,1.73,1l.85,2.19A.5.5,0,0,0,10,22.5h4a.5.5,0,0,0,.5-.31l.85-2.19a7.27,7.27,0,0,0,1.73-1l2.49,1a.5.5,0,0,0,.6-.22l2-3.46a.5.5,0,0,0-.12-.64ZM12,15.5A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z" />
+          </svg>
+        </button>
         {loading && (
           <div className="absolute inset-0 z-10 grid place-items-center bg-black/30 backdrop-blur-[1px] rounded">
             <div className="text-sm text-indigo-200">Loading samples…</div>
           </div>
+        )}
+        {editMode && (
+          <div className="absolute left-0 top-0 z-10 text-xs text-amber-300 px-2 py-1">Edit mode: click a pad to bind</div>
         )}
         <div className={"grid grid-cols-3 sm:grid-cols-6 gap-2 " + (loading ? 'pointer-events-none opacity-50' : '')}>
           {pads.map(p => (
@@ -172,18 +249,128 @@ export default function MidiSampler() {
               disabled={loading}
               onClick={() => handlePad(p.pad)}
               className={
-                'px-3 py-4 rounded border text-gray-200 active:scale-95 transition ' +
+                'relative px-3 py-4 rounded border text-gray-200 active:scale-95 transition ' +
                 (flashPad === p.pad
                   ? 'border-indigo-500 bg-indigo-600/20 shadow'
-                  : 'border-gray-700 hover:border-indigo-500 hover:text-white')
+                  : editMode
+                    ? 'border-amber-500/70 bg-amber-500/10 hover:border-amber-400 hover:text-white'
+                    : 'border-gray-700 hover:border-indigo-500 hover:text-white')
               }
             >
               <div className="text-lg font-semibold">{p.label}</div>
+              {editMode && (
+                <span className="absolute top-1 right-2 text-[10px] text-amber-300">edit</span>
+              )}
             </button>
           ))}
         </div>
       </div>
-      <KeyMappingEditor pads={pads.map(p => ({ id: String(p.midi), label: p.label, midi: p.midi }))} value={midiToKeys} onChange={persistMapping} />
+      {/* Modal for bindings */}
+      {modalForMidi != null && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50">
+          <div className="w-full max-w-md rounded-md border border-slate-600 bg-slate-900 p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="text-sm text-slate-400">Binding for</div>
+                <div className="text-lg font-semibold">{pads.find(p => p.midi === modalForMidi)?.label}</div>
+              </div>
+              <button className="text-slate-300 hover:text-white" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); }}>×</button>
+            </div>
+            {conflictKey && (
+              <div className="mb-2 text-xs text-amber-300">Warning: key "{conflictKey.toUpperCase()}" is already used by another sound.</div>
+            )}
+            <div className="space-y-3">
+              <div>
+                <div className="text-xs text-slate-300 mb-1">Keys</div>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(bindings[modalForMidi]?.keys || []).map(k => (
+                    <span key={k} className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1">
+                      {k.toUpperCase()}
+                      <button
+                        aria-label="Remove"
+                        className="ml-1 opacity-70 hover:opacity-100"
+                        onClick={() => {
+                          const cur = bindings[modalForMidi] || { keys: [], midis: [] };
+                          const next = { ...bindings, [modalForMidi]: { ...cur, keys: cur.keys.filter(x => x !== k) } } as PadBindings;
+                          persistBindings(next);
+                        }}
+                      >×</button>
+                    </span>
+                  ))}
+                  {!(bindings[modalForMidi]?.keys || []).length && (
+                    <span className="text-xs text-slate-400">No keys mapped</span>
+                  )}
+                </div>
+                <button
+                  className={"text-xs px-2 py-1 rounded " + (listenKeyForMidi === modalForMidi ? 'bg-amber-600 hover:bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-500')}
+                  onClick={() => {
+                    setListenMidiForMidi(null);
+                    setListenKeyForMidi(modalForMidi);
+                    setConflictKey(null);
+                    const once = (e: KeyboardEvent) => {
+                      const k = e.key.toLowerCase();
+                      e.preventDefault();
+                      // conflict check
+                      const conflict = Object.entries(bindings).some(([m, b]) => Number(m) !== modalForMidi && (b?.keys || []).includes(k));
+                      if (conflict) {
+                        setConflictKey(k);
+                        setListenKeyForMidi(null);
+                        return;
+                      }
+                      const cur = bindings[modalForMidi] || { keys: [], midis: [] };
+                      if (!cur.keys.includes(k)) {
+                        const next = { ...bindings, [modalForMidi]: { ...cur, keys: [...cur.keys, k] } } as PadBindings;
+                        persistBindings(next);
+                      }
+                      setListenKeyForMidi(null);
+                    };
+                    window.addEventListener('keydown', once, { once: true });
+                  }}
+                >
+                  {listenKeyForMidi === modalForMidi ? 'Press any key…' : 'Add key'}
+                </button>
+              </div>
+              <div>
+                <div className="text-xs text-slate-300 mb-1">MIDI Notes</div>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(bindings[modalForMidi]?.midis || []).map(n => (
+                    <span key={n} className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1">
+                      {midiNumberToName(n)} ({n})
+                      <button
+                        aria-label="Remove"
+                        className="ml-1 opacity-70 hover:opacity-100"
+                        onClick={() => {
+                          const cur = bindings[modalForMidi] || { keys: [], midis: [] };
+                          const next = { ...bindings, [modalForMidi]: { ...cur, midis: cur.midis.filter(x => x !== n) } } as PadBindings;
+                          persistBindings(next);
+                        }}
+                      >×</button>
+                    </span>
+                  ))}
+                  {!(bindings[modalForMidi]?.midis || []).length && (
+                    <span className="text-xs text-slate-400">No MIDI notes mapped</span>
+                  )}
+                </div>
+                <button
+                  className={"text-xs px-2 py-1 rounded " + (listenMidiForMidi === modalForMidi ? 'bg-amber-600 hover:bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-500')}
+                  disabled={!selectedId}
+                  onClick={() => {
+                    if (!selectedId) return;
+                    setListenKeyForMidi(null);
+                    setConflictKey(null);
+                    setListenMidiForMidi(modalForMidi);
+                  }}
+                >
+                  {listenMidiForMidi === modalForMidi ? 'Play a MIDI note…' : 'Add MIDI'}
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button className="text-xs px-3 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Debug line removed per request: hide note/velocity numbers */}
       {error && <div className="text-sm text-red-400">{error}</div>}
     </div>
