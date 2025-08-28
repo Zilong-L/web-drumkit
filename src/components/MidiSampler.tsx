@@ -268,105 +268,110 @@ export default function MidiSampler() {
               <div className="mb-2 text-xs text-amber-300">Warning: key "{conflictKey.toUpperCase()}" is already used by another sound.</div>
             )}
             <div className="space-y-4">
-              <div className="rounded border border-slate-700 p-3">
-                <div className="text-base font-semibold mb-2">Keys</div>
-                <div className="flex flex-wrap gap-2 mb-3">
+              <div className="rounded-xl border border-slate-700 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[15px] sm:text-base font-semibold">Keys</div>
+                  <button
+                    aria-label="Add key binding"
+                    className={
+                      'inline-flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-full border ' +
+                      (listenKeyForMidi === modalForMidi
+                        ? 'bg-amber-600/80 border-amber-400 text-white'
+                        : 'bg-transparent border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/10')
+                    }
+                    onClick={() => {
+                      setListenMidiForMidi(null);
+                      setListenKeyForMidi(modalForMidi);
+                      setConflictKey(null);
+                      const once = (e: KeyboardEvent) => {
+                        const k = e.key.toLowerCase();
+                        e.preventDefault();
+                        const conflict = Object.entries(bindings).some(([m, b]) => Number(m) !== modalForMidi && (b?.keys || []).includes(k));
+                        if (conflict) {
+                          setConflictKey(k);
+                          setListenKeyForMidi(null);
+                          return;
+                        }
+                        const cur = bindings[modalForMidi] || { keys: [], midis: [] };
+                        if (!cur.keys.includes(k)) {
+                          const next = { ...bindings, [modalForMidi]: { ...cur, keys: [...cur.keys, k] } } as PadBindings;
+                          persistBindings(next);
+                        }
+                        setListenKeyForMidi(null);
+                      };
+                      window.addEventListener('keydown', once, { once: true });
+                    }}
+                  >
+                    <span className="text-lg leading-none">+</span>
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   {(bindings[modalForMidi]?.keys || []).map(k => (
-                    <span key={k} className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1">
+                    <span key={k} className="text-sm md:text-base bg-indigo-500/10 border border-indigo-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
                       {k.toUpperCase()}
                       <button
                         aria-label="Remove"
-                        className="ml-1 opacity-70 hover:opacity-100"
+                        className="inline-flex items-center justify-center w-4 h-4 md:w-5 md:h-5 rounded-full border border-indigo-400/60 text-indigo-200 hover:bg-indigo-500/20"
                         onClick={() => {
                           const cur = bindings[modalForMidi] || { keys: [], midis: [] };
                           const next = { ...bindings, [modalForMidi]: { ...cur, keys: cur.keys.filter(x => x !== k) } } as PadBindings;
                           persistBindings(next);
                         }}
-                      >×</button>
+                      >
+                        <span className="-mt-[1px]">×</span>
+                      </button>
                     </span>
                   ))}
                   {!(bindings[modalForMidi]?.keys || []).length && (
-                    <span className="text-xs text-slate-400">No keys mapped</span>
+                    <span className="text-xs text-slate-400">No mapping</span>
                   )}
                 </div>
-                <button
-                  aria-label="Add key binding"
-                  className={
-                    "inline-flex items-center justify-center w-10 h-10 rounded-full border " +
-                    (listenKeyForMidi === modalForMidi
-                      ? 'bg-amber-600/80 border-amber-400 text-white animate-pulse'
-                      : 'bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500')
-                  }
-                  onClick={() => {
-                    setListenMidiForMidi(null);
-                    setListenKeyForMidi(modalForMidi);
-                    setConflictKey(null);
-                    const once = (e: KeyboardEvent) => {
-                      const k = e.key.toLowerCase();
-                      e.preventDefault();
-                      // conflict check
-                      const conflict = Object.entries(bindings).some(([m, b]) => Number(m) !== modalForMidi && (b?.keys || []).includes(k));
-                      if (conflict) {
-                        setConflictKey(k);
-                        setListenKeyForMidi(null);
-                        return;
-                      }
-                      const cur = bindings[modalForMidi] || { keys: [], midis: [] };
-                      if (!cur.keys.includes(k)) {
-                        const next = { ...bindings, [modalForMidi]: { ...cur, keys: [...cur.keys, k] } } as PadBindings;
-                        persistBindings(next);
-                      }
-                      setListenKeyForMidi(null);
-                    };
-                    window.addEventListener('keydown', once, { once: true });
-                  }}
-                >
-                  <span className="text-xl leading-none">+</span>
-                </button>
               </div>
-              <div className="rounded border border-slate-700 p-3">
-                <div className="text-base font-semibold mb-2">MIDI Notes</div>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {/* Default target MIDI for this sound (non-removable) */}
-                  <span className="text-xs bg-slate-800/70 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1 opacity-80">
-                    Default: {midiNumberToName(modalForMidi)} ({modalForMidi})
-                  </span>
+              <div className="rounded-xl border border-slate-700 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[15px] sm:text-base font-semibold">
+                    MIDI Notes <span className="ml-2 text-xs font-normal text-slate-400">(Default: {midiNumberToName(modalForMidi)} {modalForMidi})</span>
+                  </div>
+                  <button
+                    aria-label="Add MIDI binding"
+                    className={
+                      'inline-flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-full border ' +
+                      (listenMidiForMidi === modalForMidi
+                        ? 'bg-amber-600/80 border-amber-400 text-white'
+                        : (selectedId ? 'bg-transparent border-emerald-500/60 text-emerald-300 hover:bg-emerald-500/10' : 'bg-transparent border-slate-600 text-slate-500 cursor-not-allowed'))
+                    }
+                    disabled={!selectedId}
+                    onClick={() => {
+                      if (!selectedId) return;
+                      setListenKeyForMidi(null);
+                      setConflictKey(null);
+                      setListenMidiForMidi(modalForMidi);
+                    }}
+                  >
+                    <span className="text-lg leading-none">+</span>
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   {(bindings[modalForMidi]?.midis || []).map(n => (
-                    <span key={n} className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1">
+                    <span key={n} className="text-sm md:text-base bg-emerald-500/10 border border-emerald-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
                       {midiNumberToName(n)} ({n})
                       <button
                         aria-label="Remove"
-                        className="ml-1 opacity-70 hover:opacity-100"
+                        className="inline-flex items-center justify-center w-4 h-4 md:w-5 md:h-5 rounded-full border border-emerald-400/60 text-emerald-200 hover:bg-emerald-500/20"
                         onClick={() => {
                           const cur = bindings[modalForMidi] || { keys: [], midis: [] };
                           const next = { ...bindings, [modalForMidi]: { ...cur, midis: cur.midis.filter(x => x !== n) } } as PadBindings;
                           persistBindings(next);
                         }}
-                      >×</button>
+                      >
+                        <span className="-mt-[1px]">×</span>
+                      </button>
                     </span>
                   ))}
                   {!(bindings[modalForMidi]?.midis || []).length && (
-                    <span className="text-xs text-slate-400">No MIDI notes mapped</span>
+                    <span className="text-xs text-slate-400">No mapping</span>
                   )}
                 </div>
-                <button
-                  aria-label="Add MIDI binding"
-                  className={
-                    "inline-flex items-center justify-center w-10 h-10 rounded-full border " +
-                    (listenMidiForMidi === modalForMidi
-                      ? 'bg-amber-600/80 border-amber-400 text-white animate-pulse'
-                      : (selectedId ? 'bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500' : 'bg-slate-700 border-slate-600 text-slate-400 cursor-not-allowed'))
-                  }
-                  disabled={!selectedId}
-                  onClick={() => {
-                    if (!selectedId) return;
-                    setListenKeyForMidi(null);
-                    setConflictKey(null);
-                    setListenMidiForMidi(modalForMidi);
-                  }}
-                >
-                  <span className="text-xl leading-none">+</span>
-                </button>
               </div>
             </div>
             <div className="mt-4 flex items-center justify-end gap-2">
