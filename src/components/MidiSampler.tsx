@@ -253,6 +253,25 @@ export default function MidiSampler() {
         </div>
       </div>
       <div className="relative">
+        {editMode && (
+          <button
+            onClick={() => {
+              const ok = window.confirm('Reset all custom key and MIDI bindings?');
+              if (!ok) return;
+              setListenKeyForMidi(null);
+              setListenMidiForMidi(null);
+              setConflictKey(null);
+              setConflictMidi(null);
+              persistBindings({});
+            }}
+            title="Reset all bindings"
+            className={'absolute bottom-2 right-12 z-20 p-2 rounded-full border shadow bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700'}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+              <path d="M12 5V2L8 6l4 4V7c3.309 0 6 2.691 6 6a6 6 0 1 1-6-6zm0 14a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+            </svg>
+          </button>
+        )}
         <button
           onClick={() => setEditMode(v => !v)}
           className={
@@ -339,9 +358,9 @@ export default function MidiSampler() {
                     <span className="text-lg leading-none">+</span>
                   </button>
                 </div>
-                <div className="flex flex-nowrap items-center gap-2 h-10 overflow-x-auto">
+                <div className="flex flex-wrap gap-2 content-start items-center min-h-[72px]">
                   {(bindings[modalForMidi]?.keys || []).map(k => (
-                    <span key={k} className="whitespace-nowrap text-sm md:text-base bg-indigo-500/10 border border-indigo-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
+                    <span key={k} className="whitespace-nowrap text-sm md:text-base bg-indigo-500/10 border border-indigo-500/50 text-slate-100 rounded-full h-8 px-3 inline-flex items-center gap-2">
                       {k.toUpperCase()}
                       <button
                         aria-label="Remove"
@@ -357,15 +376,13 @@ export default function MidiSampler() {
                     </span>
                   ))}
                   {!(bindings[modalForMidi]?.keys || []).length && (
-                    <span className="text-xs text-slate-400">No mapping</span>
+                    <span className="h-8 inline-flex items-center text-xs text-slate-400">No mapping</span>
                   )}
                 </div>
               </div>
               <div className="rounded-xl border border-slate-700 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="text-[15px] sm:text-base font-semibold">
-                    MIDI Notes <span className="ml-2 text-xs font-normal text-slate-400">(Default: {midiNumberToName(modalForMidi)} {modalForMidi})</span>
-                  </div>
+                  <div className="text-[15px] sm:text-base font-semibold">MIDI Notes</div>
                   <button
                     aria-label="Add MIDI binding"
                     className={
@@ -386,9 +403,13 @@ export default function MidiSampler() {
                     <span className="text-lg leading-none">+</span>
                   </button>
                 </div>
-                <div className="flex flex-nowrap items-center gap-2 h-10 overflow-x-auto">
+                <div className="flex flex-wrap gap-2 content-start items-center min-h-[72px]">
+                  {/* Default target MIDI for this sound (non-removable) */}
+                  <span className="whitespace-nowrap text-sm md:text-base bg-emerald-500/10 border border-emerald-500/50 text-slate-100 rounded-full h-8 px-3 inline-flex items-center gap-2 opacity-80">
+                    Default: {midiNumberToName(modalForMidi)} ({modalForMidi})
+                  </span>
                   {(bindings[modalForMidi]?.midis || []).map(n => (
-                    <span key={n} className="whitespace-nowrap text-sm md:text-base bg-emerald-500/10 border border-emerald-500/50 text-slate-100 rounded-full px-3 py-1 inline-flex items-center gap-2">
+                    <span key={n} className="whitespace-nowrap text-sm md:text-base bg-emerald-500/10 border border-emerald-500/50 text-slate-100 rounded-full h-8 px-3 inline-flex items-center gap-2">
                       {midiNumberToName(n)} ({n})
                       <button
                         aria-label="Remove"
@@ -404,7 +425,7 @@ export default function MidiSampler() {
                     </span>
                   ))}
                   {!(bindings[modalForMidi]?.midis || []).length && (
-                    <span className="text-xs text-slate-400">No mapping</span>
+                    <span className="h-8 inline-flex items-center text-xs text-slate-400">No mapping</span>
                   )}
                 </div>
               </div>
