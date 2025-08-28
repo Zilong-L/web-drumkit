@@ -93,6 +93,15 @@ export default function MidiSampler() {
     const map = new Map(allPads.map(p => [p.pad, p] as const));
     return order.map(p => map.get(p)).filter(Boolean) as typeof allPads;
   }, [allPads]);
+  // Default immutable key per pad (list can be extended)
+  const defaultKeysMap = useMemo(() => {
+    const orderKeys = ['a','s','d','f','g','h','j','k','u','i','l',';'];
+    const res: Record<number, string[]> = {};
+    pads.slice(0, orderKeys.length).forEach((p, idx) => {
+      res[p.midi] = [orderKeys[idx]];
+    });
+    return res;
+  }, [pads]);
 
   // Try to preload the sampler as soon as component mounts
   useEffect(() => {
@@ -146,29 +155,35 @@ export default function MidiSampler() {
       if (legacy) {
         const parsed: Record<number, string[]> = JSON.parse(legacy);
         migrated = Object.fromEntries(
-          Object.entries(parsed).map(([m, keys]) => [Number(m), { keys, midis: [] }])
+          Object.entries(parsed).map(([m, keys]) => {
+            const midi = Number(m);
+            const defaults = (defaultKeysMap as Record<number, string[]>)[midi] || [];
+            // store only additional keys beyond defaults
+            const additional = keys.filter(k => !defaults.includes(k));
+            return [midi, { keys: additional, midis: [] }];
+          })
         ) as PadBindings;
       }
     } catch {}
     if (migrated) return migrated;
-    // Default mapping across common pads (keys only)
-    const orderKeys = ['a','s','d','f','g','h','j','k','u','i','l',';'];
-    const init: PadBindings = {};
-    pads.slice(0, orderKeys.length).forEach((p, idx) => {
-      init[p.midi] = { keys: [orderKeys[idx]], midis: [] };
-    });
-    return init;
+    // No additional keys by default; defaults are implicit and immutable
+    return {} as PadBindings;
   });
 
   const padsByPad = useMemo(() => new Map(allPads.map(p => [p.pad, p])), [allPads]);
 
   const keyMap: KeyMap = useMemo(() => {
     const entries: [string, { midi: number } ][] = [];
+    // include default keys
+    Object.entries(defaultKeysMap).forEach(([midi, keys]) => {
+      keys.forEach(k => entries.push([k, { midi: Number(midi) }]));
+    });
+    // include additional keys
     Object.entries(bindings).forEach(([midi, b]) => {
       (b?.keys || []).forEach((k) => entries.push([k, { midi: Number(midi) }]));
     });
     return Object.fromEntries(entries);
-  }, [bindings]);
+  }, [bindings, defaultKeysMap]);
 
   const persistBindings = (next: PadBindings) => {
     setBindings(next);
@@ -282,6 +297,13 @@ export default function MidiSampler() {
             <div className="space-y-3">
               <div>
                 <div className="text-xs text-slate-300 mb-1">Keys</div>
+                <div className="flex flex-wrap gap-2 mb-1">
+                  {(defaultKeysMap[modalForMidi] || []).map(k => (
+                    <span key={`def-${k}`} className="text-xs bg-slate-800/70 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1 opacity-80">
+                      Default: {k.toUpperCase()} 
+                    </span>
+                  ))}
+                </div>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {(bindings[modalForMidi]?.keys || []).map(k => (
                     <span key={k} className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1">
@@ -298,7 +320,7 @@ export default function MidiSampler() {
                     </span>
                   ))}
                   {!(bindings[modalForMidi]?.keys || []).length && (
-                    <span className="text-xs text-slate-400">No keys mapped</span>
+                    <span className="text-xs text-slate-400">No additional keys</span>
                   )}
                 </div>
                 <button
@@ -311,13 +333,21 @@ export default function MidiSampler() {
                       const k = e.key.toLowerCase();
                       e.preventDefault();
                       // conflict check
-                      const conflict = Object.entries(bindings).some(([m, b]) => Number(m) !== modalForMidi && (b?.keys || []).includes(k));
+                      const conflictInAdditional = Object.entries(bindings).some(([m, b]) => Number(m) !== modalForMidi && (b?.keys || []).includes(k));
+                      const conflictInDefaults = Object.entries(defaultKeysMap).some(([m, keys]) => Number(m) !== modalForMidi && (keys || []).includes(k));
+                      const conflict = conflictInAdditional || conflictInDefaults;
                       if (conflict) {
                         setConflictKey(k);
                         setListenKeyForMidi(null);
                         return;
                       }
                       const cur = bindings[modalForMidi] || { keys: [], midis: [] };
+                      // don't store defaults again
+                      const defaults = defaultKeysMap[modalForMidi] || [];
+                      if (defaults.includes(k)) {
+                        setListenKeyForMidi(null);
+                        return;
+                      }
                       if (!cur.keys.includes(k)) {
                         const next = { ...bindings, [modalForMidi]: { ...cur, keys: [...cur.keys, k] } } as PadBindings;
                         persistBindings(next);
