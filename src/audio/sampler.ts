@@ -89,13 +89,13 @@ const BRAND = 'GSCW';
 const base = `/samples/${BRAND}`;
 const urls: Record<NoteName, string> = {
   C2: `${base}/kick.wav`,
-  D2: `${base}/snare-14.wav`,
+  D2: `${base}/snare.wav`,
   'D#2': `${base}/stick.wav`,
   'F#2': `${base}/hh-closed.wav`,
   'G#2': `${base}/hh-closed.wav`,
   'A#2': `${base}/hh-open.wav`,
-  'C#3': `${base}/crash-18.wav`,
-  'C#4': `${base}/crash-14.wav`,
+  'C#3': `${base}/crash.wav`,
+  'C#4': `${base}/crash.wav`,
   'D#3': `${base}/ride.wav`,
   C3: `${base}/tom-high.wav`,
   A2: `${base}/tom-mid.wav`,
