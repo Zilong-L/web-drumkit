@@ -267,10 +267,10 @@ export default function MidiSampler() {
             {conflictKey && (
               <div className="mb-2 text-xs text-amber-300">Warning: key "{conflictKey.toUpperCase()}" is already used by another sound.</div>
             )}
-            <div className="space-y-3">
-              <div>
-                <div className="text-xs text-slate-300 mb-1">Keys</div>
-                <div className="flex flex-wrap gap-2 mb-2">
+            <div className="space-y-4">
+              <div className="rounded border border-slate-700 p-3">
+                <div className="text-base font-semibold mb-2">Keys</div>
+                <div className="flex flex-wrap gap-2 mb-3">
                   {(bindings[modalForMidi]?.keys || []).map(k => (
                     <span key={k} className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1">
                       {k.toUpperCase()}
@@ -290,7 +290,13 @@ export default function MidiSampler() {
                   )}
                 </div>
                 <button
-                  className={"text-xs px-2 py-1 rounded " + (listenKeyForMidi === modalForMidi ? 'bg-amber-600 hover:bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-500')}
+                  aria-label="Add key binding"
+                  className={
+                    "inline-flex items-center justify-center w-10 h-10 rounded-full border " +
+                    (listenKeyForMidi === modalForMidi
+                      ? 'bg-amber-600/80 border-amber-400 text-white animate-pulse'
+                      : 'bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500')
+                  }
                   onClick={() => {
                     setListenMidiForMidi(null);
                     setListenKeyForMidi(modalForMidi);
@@ -315,12 +321,12 @@ export default function MidiSampler() {
                     window.addEventListener('keydown', once, { once: true });
                   }}
                 >
-                  {listenKeyForMidi === modalForMidi ? 'Press any key…' : 'Add key'}
+                  <span className="text-xl leading-none">+</span>
                 </button>
               </div>
-              <div>
-                <div className="text-xs text-slate-300 mb-1">MIDI Notes</div>
-                <div className="flex flex-wrap gap-2 mb-2">
+              <div className="rounded border border-slate-700 p-3">
+                <div className="text-base font-semibold mb-2">MIDI Notes</div>
+                <div className="flex flex-wrap gap-2 mb-3">
                   {/* Default target MIDI for this sound (non-removable) */}
                   <span className="text-xs bg-slate-800/70 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1 opacity-80">
                     Default: {midiNumberToName(modalForMidi)} ({modalForMidi})
@@ -344,7 +350,13 @@ export default function MidiSampler() {
                   )}
                 </div>
                 <button
-                  className={"text-xs px-2 py-1 rounded " + (listenMidiForMidi === modalForMidi ? 'bg-amber-600 hover:bg-amber-500' : 'bg-indigo-600 hover:bg-indigo-500')}
+                  aria-label="Add MIDI binding"
+                  className={
+                    "inline-flex items-center justify-center w-10 h-10 rounded-full border " +
+                    (listenMidiForMidi === modalForMidi
+                      ? 'bg-amber-600/80 border-amber-400 text-white animate-pulse'
+                      : (selectedId ? 'bg-indigo-600 border-indigo-500 text-white hover:bg-indigo-500' : 'bg-slate-700 border-slate-600 text-slate-400 cursor-not-allowed'))
+                  }
                   disabled={!selectedId}
                   onClick={() => {
                     if (!selectedId) return;
@@ -353,7 +365,7 @@ export default function MidiSampler() {
                     setListenMidiForMidi(modalForMidi);
                   }}
                 >
-                  {listenMidiForMidi === modalForMidi ? 'Play a MIDI note…' : 'Add MIDI'}
+                  <span className="text-xl leading-none">+</span>
                 </button>
               </div>
             </div>
