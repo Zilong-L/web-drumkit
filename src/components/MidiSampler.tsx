@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MidiDevicePicker from './MidiDevicePicker';
 import { initMidiCcListenerForInput, initMidiListenerForInput } from '../midi/midi';
 import { ensureAudioStarted, getDrumSampler, listDrumPads, triggerMidi, isUsingFallback, DrumPad, triggerPad, midiNoteToPad, MidiCC, setHiHatOpenByCC4 } from '../audio/sampler';
@@ -27,7 +27,11 @@ export default function MidiSampler() {
   const [listenKeyForMidi, setListenKeyForMidi] = useState<number | null>(null);
   const [listenMidiForMidi, setListenMidiForMidi] = useState<number | null>(null); // target pad midi we capture for
   const [conflictKey, setConflictKey] = useState<string | null>(null);
+  const [conflictMidiNote, setConflictMidiNote] = useState<number | null>(null);
   // no crash/snare variant toggles for now
+
+  // Ref to always read latest bindings inside MIDI handler without stale closures
+  const bindingsRef = useRef<PadBindings>({});
 
   useEffect(() => {
     let disposed = false;
@@ -41,6 +45,13 @@ export default function MidiSampler() {
           setLast({ note, velocity: vel });
           // If we are capturing a MIDI note for binding, record and skip normal triggering
           if (listenMidiForMidi != null && vel > 0) {
+            // Prevent duplicate MIDI mapping used by another sound
+            const duplicate = Object.entries(bindings).some(([m, b]) => Number(m) !== listenMidiForMidi && (b?.midis || []).includes(note));
+            if (duplicate) {
+              setConflictMidiNote(note);
+              setListenMidiForMidi(null);
+              return;
+            }
             setBindings(prev => {
               const t = listenMidiForMidi;
               const cur = prev[t] || { keys: [], midis: [] };
@@ -54,7 +65,13 @@ export default function MidiSampler() {
             setListenMidiForMidi(null);
             return;
           }
-          const resolved = resolveIncomingMidi(note);
+          const getResolvedIncomingMidi = (incoming: number) => {
+            for (const [targetStr, b] of Object.entries(bindingsRef.current)) {
+              if (b?.midis?.includes(incoming)) return Number(targetStr);
+            }
+            return incoming;
+          };
+          const resolved = getResolvedIncomingMidi(note);
           if (vel > 0 && resolved != null) {
             const pad = midiNoteToPad(resolved);
             if (pad) {
@@ -168,15 +185,11 @@ export default function MidiSampler() {
   const persistBindings = (next: PadBindings) => {
     setBindings(next);
     try { localStorage.setItem(BINDING_KEY, JSON.stringify(next)); } catch {}
+    bindingsRef.current = next;
   };
 
-  const resolveIncomingMidi = useCallback((incoming: number) => {
-    // if any binding contains this incoming midi, route to that target midi
-    for (const [targetStr, b] of Object.entries(bindings)) {
-      if (b?.midis?.includes(incoming)) return Number(targetStr);
-    }
-    // otherwise, leave as-is
-    return incoming;
+  useEffect(() => {
+    bindingsRef.current = bindings;
   }, [bindings]);
 
   useKeyboardPads(keyMap, {
@@ -257,15 +270,18 @@ export default function MidiSampler() {
       {modalForMidi != null && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50">
           <div className="w-full max-w-md rounded-md border border-slate-600 bg-slate-900 p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="text-sm text-slate-400">Binding for</div>
-                <div className="text-lg font-semibold">{pads.find(p => p.midi === modalForMidi)?.label}</div>
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="text-sm text-slate-400">Binding for</div>
+                  <div className="text-lg font-semibold">{pads.find(p => p.midi === modalForMidi)?.label}</div>
+                </div>
+              <button className="text-slate-300 hover:text-white" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); setConflictMidiNote(null); }}>×</button>
               </div>
-              <button className="text-slate-300 hover:text-white" onClick={() => { setModalForMidi(null); setListenKeyForMidi(null); setListenMidiForMidi(null); setConflictKey(null); }}>×</button>
-            </div>
             {conflictKey && (
               <div className="mb-2 text-xs text-amber-300">Warning: key "{conflictKey.toUpperCase()}" is already used by another sound.</div>
+            )}
+            {conflictMidiNote != null && (
+              <div className="mb-2 text-xs text-amber-300">Warning: MIDI note {midiNumberToName(conflictMidiNote)} ({conflictMidiNote}) is already used by another sound.</div>
             )}
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-700 p-3">
@@ -342,11 +358,12 @@ export default function MidiSampler() {
                     }
                     disabled={!selectedId}
                     onClick={() => {
-                      if (!selectedId) return;
-                      setListenKeyForMidi(null);
-                      setConflictKey(null);
-                      setListenMidiForMidi(modalForMidi);
-                    }}
+                    if (!selectedId) return;
+                    setListenKeyForMidi(null);
+                    setConflictKey(null);
+                    setConflictMidiNote(null);
+                    setListenMidiForMidi(modalForMidi);
+                  }}
                   >
                     <span className="text-lg leading-none">+</span>
                   </button>
