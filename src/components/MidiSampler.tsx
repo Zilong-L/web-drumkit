@@ -333,6 +333,10 @@ export default function MidiSampler() {
               <div>
                 <div className="text-xs text-slate-300 mb-1">MIDI Notes</div>
                 <div className="flex flex-wrap gap-2 mb-2">
+                  {/* Default target MIDI for this sound (non-removable) */}
+                  <span className="text-xs bg-slate-800/70 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1 opacity-80">
+                    Default: {midiNumberToName(modalForMidi)} ({modalForMidi})
+                  </span>
                   {(bindings[modalForMidi]?.midis || []).map(n => (
                     <span key={n} className="text-xs bg-slate-800 border border-slate-600 rounded px-2 py-0.5 inline-flex items-center gap-1">
                       {midiNumberToName(n)} ({n})
