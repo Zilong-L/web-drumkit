@@ -30,8 +30,9 @@ export default function MidiSampler() {
   const [conflictMidiNote, setConflictMidiNote] = useState<number | null>(null);
   // no crash/snare variant toggles for now
 
-  // Ref to always read latest bindings inside MIDI handler without stale closures
+  // Refs to always read latest data inside MIDI handler without stale closures
   const bindingsRef = useRef<PadBindings>({});
+  const defaultMidiSetRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     let disposed = false;
@@ -46,8 +47,10 @@ export default function MidiSampler() {
           // If we are capturing a MIDI note for binding, record and skip normal triggering
           if (listenMidiForMidi != null && vel > 0) {
             // Prevent duplicate MIDI mapping used by another sound
-            const duplicate = Object.entries(bindings).some(([m, b]) => Number(m) !== listenMidiForMidi && (b?.midis || []).includes(note));
-            if (duplicate) {
+            const duplicate = Object.entries(bindingsRef.current).some(([m, b]) => Number(m) !== listenMidiForMidi && (b?.midis || []).includes(note));
+            // Prevent binding a GM default note that belongs to another sound
+            const isDefaultMidi = defaultMidiSetRef.current.has(note) && note !== listenMidiForMidi;
+            if (duplicate || isDefaultMidi) {
               setConflictMidiNote(note);
               setListenMidiForMidi(null);
               return;
@@ -55,6 +58,8 @@ export default function MidiSampler() {
             setBindings(prev => {
               const t = listenMidiForMidi;
               const cur = prev[t] || { keys: [], midis: [] };
+              // ignore if trying to add its own default midi
+              if (note === t) return prev;
               if (!cur.midis.includes(note)) {
                 const next = { ...prev, [t]: { ...cur, midis: [...cur.midis, note] } } as PadBindings;
                 try { localStorage.setItem(BINDING_KEY, JSON.stringify(next)); } catch {}
@@ -66,6 +71,8 @@ export default function MidiSampler() {
             return;
           }
           const getResolvedIncomingMidi = (incoming: number) => {
+            // Never override GM default mappings
+            if (defaultMidiSetRef.current.has(incoming)) return incoming;
             for (const [targetStr, b] of Object.entries(bindingsRef.current)) {
               if (b?.midis?.includes(incoming)) return Number(targetStr);
             }
@@ -173,6 +180,11 @@ export default function MidiSampler() {
   });
 
   const padsByPad = useMemo(() => new Map(allPads.map(p => [p.pad, p])), [allPads]);
+  const midiToLabel = useMemo(() => Object.fromEntries(allPads.map(p => [p.midi, p.label] as const)), [allPads]);
+
+  useEffect(() => {
+    defaultMidiSetRef.current = new Set(allPads.map(p => p.midi));
+  }, [allPads]);
 
   const keyMap: KeyMap = useMemo(() => {
     const entries: [string, { midi: number } ][] = [];
@@ -281,7 +293,9 @@ export default function MidiSampler() {
               <div className="mb-2 text-xs text-amber-300">Warning: key "{conflictKey.toUpperCase()}" is already used by another sound.</div>
             )}
             {conflictMidiNote != null && (
-              <div className="mb-2 text-xs text-amber-300">Warning: MIDI note {midiNumberToName(conflictMidiNote)} ({conflictMidiNote}) is already used by another sound.</div>
+              <div className="mb-2 text-xs text-amber-300">
+                Warning: MIDI note {midiNumberToName(conflictMidiNote)} ({conflictMidiNote}) is already used by another sound{defaultMidiSetRef.current.has(conflictMidiNote) ? ` (default: ${midiToLabel[conflictMidiNote]})` : ''}.
+              </div>
             )}
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-700 p-3">
